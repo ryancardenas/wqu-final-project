@@ -13,12 +13,18 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.13"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
 
       - name: Install dependencies
-        run: |
-          pip install pre-commit
-          pip install nbqa black flake8 isort mypy
+        run: pip install -r requirements-dev.txt
 
       - name: Run pre-commit hooks
         run: pre-commit run --all-files

@@ -1,0 +1,7 @@
+# Requirements for running GitHub Actions linting workflow
+pre-commit
+nbqa
+black
+flake8
+isort
+mypy
