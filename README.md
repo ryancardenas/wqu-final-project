@@ -1,7 +1,5 @@
 # wqu-final-project
 
-![Lint Status](https://github.com/ryancardenas/wqufp/actions/workflows/lint.yml/badge.svg)
-
 Code for our final project of the M.Sc. in Financial Engineering at WorldQuant University.
 
 ## Authors
