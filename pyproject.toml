@@ -1,0 +1,13 @@
+[tool.black]
+line-length = 88
+
+[tool.isort]
+profile = "black"
+
+[tool.flake8]
+max-inline-length = 88
+extend-ignore = ["E203", "W503"]  # Ignore whitespace before ':' and line break before binary operator
+exclude = [".git", "__pycache__", "build", "dist"] 
+
+[tool.mypy]
+strict = true
