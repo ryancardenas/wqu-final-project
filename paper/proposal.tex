@@ -1,0 +1,122 @@
+%% 
+%% Copyright 2025 Ryan Cardenas
+%% 
+%% This file contains the source code for my proposal as part of the WQU 
+%% Capstone 690 course at WorldQuant University. It is based on the Elsevier
+%% template, which can be found at: 
+%% https://www.elsevier.com/researcher/author/policies-and-guidelines/latex-instructions
+%% 
+%% This document is not intended for distribution outside of the WorldQuant University
+%% Capstone 690 course without permission from the author.
+%%
+
+
+\documentclass[final,3p,times,authoryear]{elsarticle}
+
+%% The amssymb package provides various useful mathematical symbols
+\usepackage{amssymb}
+%% The amsmath package provides various useful equation environments.
+\usepackage{amsmath}
+
+\journal{WorldQuant University Capstone Course 690}
+
+\begin{document}
+
+\begin{frontmatter}
+
+    \title{Project Proposal: Exploration of Risk Neutral Density and Pricing Kernels in Equity Markets\tnoteref{t1}}
+    \tnotetext[t1]{October 30, 2025 - This document is submitted to the WorldQuant University Capstone 690 course as a requirement for the Master of Science in Financial Engineering.} 
+
+    \author{Ryan Cardenas}
+    \ead{cardenasr913@gmail.com}
+    \affiliation{organization={WorldQuant University}}
+
+    %% Abstract
+    \begin{abstract}
+    %% Text of abstract
+    Abstract text.
+    \end{abstract}
+
+    %% Keywords
+    \begin{keyword} %% keywords here, in the form: keyword \sep keyword
+    key1 \sep key2 \sep key3
+    \end{keyword}
+    
+
+\end{frontmatter}
+
+
+%% Use \section commands to start a section
+\section{Background}
+  \label{background}
+  Describe the following: Concepts - weaknesses, strengths, or gaps; Contribution or extension of the topic; 
+  Existing pain points in Financial Engineering and how this approach can help.
+
+\section{Objectives}
+  \label{objectives}
+  Describe the major theme, including how this work offers a contribution or extension of the topic.
+
+\section{Theory}
+  \label{theory}
+  Explain any assumptions, weakness, or gaps.
+
+\section{Plan}
+  \label{plan}
+  Explain strengths or gaps
+
+\section{Methodology}
+  \label{methodology}
+  Explain details.
+
+\section{Other Real-Life Applications}
+  \label{applications}
+  Explain any assumptions, weakness, or gaps.
+
+\section{Relevant Literature}
+  \label{literature}
+  Explain relevant literature.
+
+%% The Appendices part is started with the command \appendix;
+%% appendix sections are then done as normal sections
+\appendix
+  \section{First Appendix}
+    \label{app1}
+    Appendix text.
+
+    %% For citations use: 
+    %%       \citet{<label>} ==> Lamport (1994)
+    %%       \citep{<label>} ==> (Lamport, 1994)
+    %%
+    Example citation, See \citet{lamport94}.
+
+
+%% If you have bib database file and want bibtex to generate the
+%% bibitems, please use
+%%
+%%  \bibliographystyle{elsarticle-harv} 
+%%  \bibliography{<your bibdatabase>}
+%%
+%% else use the following coding to input the bibitems directly in the
+%% TeX file.
+%%
+%% Refer following link for more details about bibliography and citations.
+%% https://en.wikibooks.org/wiki/LaTeX/Bibliography_Management
+  \begin{thebibliography}{00}
+
+  %% For authoryear reference style
+  %% \bibitem[Author(year)]{label}
+  %% Text of bibliographic item
+
+  \bibitem[Lamport(1994)]{lamport94}
+    Leslie Lamport,
+    \textit{\LaTeX: a document preparation system},
+    Addison Wesley, Massachusetts,
+    2nd edition,
+    1994.
+
+  \end{thebibliography}
+\end{document}
+
+\endinput
+%%
+%% End of file
