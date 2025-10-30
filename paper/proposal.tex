@@ -42,7 +42,6 @@
     key1 \sep key2 \sep key3
     \end{keyword}
     
-
 \end{frontmatter}
 
 
@@ -56,6 +55,20 @@
   \label{objectives}
   Describe the major theme, including how this work offers a contribution or extension of the topic.
 
+  Questions of Interest:
+  \begin{enumerate}
+    \item To what extent do the "market-wide" state-prices (modeled as market-dependent stock states via CAPM) and their corresponding risk-neutral probabilities match the risk-neutral probabilities implied by options prices on indices and individual stocks?
+    \item To what extent do RNDs for different maturities exhibit a term structure that can be used to model path-dependent options?
+    \item How can I derive historical real probabilities from risk-neutral densities, and how do these compare to empirical distributions of asset returns?
+    \item How does variance risk premium vary with risk-free rate?
+    \item How does IV (as a function of moneyness) vary with risk-free rate?
+    \item How do IV curves and theire associated RNDs change over time?
+    \item How do pricing kernels vary with recent volatility?
+    \item Can a ML model be trained to extract the pricing kernel?
+    \item To what extent do early-exercise premiums in American puts (for non-dividend-paying stocks) match or predict Q-measure and P-measure probabilities?
+    \item To what extent do differences in call/put implied volatilities effect pricing kernels, Q-measure probabilities, and P-measure probabilities?
+  \end{enumerate}
+
 \section{Theory}
   \label{theory}
   Explain any assumptions, weakness, or gaps.
@@ -66,7 +79,9 @@
 
 \section{Methodology}
   \label{methodology}
-  Explain details.
+  To model interest rates, intraday SPX option prices provide inputs to put-call parity, resulting in a series of implied rates for each strike throughout the day. Since strikes far from the underlying price tend to exhibit higher stochastic discount factors, and since these factors are difficult to estimate without already knowing the risk-free rate, we will use only ATM and near-ATM strikes. Accounting for the small, but non-zero differences in time-to-maturity throughout the day, we arrive at a distribution of implied interest rates, the median of which will serve as our estimated risk-free rate for that day.
+
+
 
 \section{Other Real-Life Applications}
   \label{applications}
@@ -75,6 +90,7 @@
 \section{Relevant Literature}
   \label{literature}
   Explain relevant literature.
+
 
 %% The Appendices part is started with the command \appendix;
 %% appendix sections are then done as normal sections
@@ -87,34 +103,12 @@
     %%       \citet{<label>} ==> Lamport (1994)
     %%       \citep{<label>} ==> (Lamport, 1994)
     %%
-    Example citation, See \citet{lamport94}.
+    See \citet{jackwerth_option_implied_2004}.
 
 
-%% If you have bib database file and want bibtex to generate the
-%% bibitems, please use
-%%
-%%  \bibliographystyle{elsarticle-harv} 
-%%  \bibliography{<your bibdatabase>}
-%%
-%% else use the following coding to input the bibitems directly in the
-%% TeX file.
-%%
-%% Refer following link for more details about bibliography and citations.
-%% https://en.wikibooks.org/wiki/LaTeX/Bibliography_Management
-  \begin{thebibliography}{00}
+\bibliographystyle{elsarticle-harv} 
+\bibliography{references}
 
-  %% For authoryear reference style
-  %% \bibitem[Author(year)]{label}
-  %% Text of bibliographic item
-
-  \bibitem[Lamport(1994)]{lamport94}
-    Leslie Lamport,
-    \textit{\LaTeX: a document preparation system},
-    Addison Wesley, Massachusetts,
-    2nd edition,
-    1994.
-
-  \end{thebibliography}
 \end{document}
 
 \endinput
