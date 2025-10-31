@@ -39,7 +39,7 @@
 
     %% Keywords
     \begin{keyword} %% keywords here, in the form: keyword \sep keyword
-    key1 \sep key2 \sep key3
+    risk-neutral density \sep options \sep pricing kernel
     \end{keyword}
     
 \end{frontmatter}
@@ -48,21 +48,15 @@
 %% Use \section commands to start a section
 \section{Background}
   \label{background}
-  \textit{Describe the following: Concepts - weaknesses, strengths, or gaps; Contribution or extension of the topic; 
-  Existing pain points in Financial Engineering and how this approach can help.}
-
-  
-  Risk-neutral densities (RNDs) have fascinated researchers in financial engineering ever since \citet{black_pricing_1973} first published their risk-neutral method for pricing European options. In the years that followed, \citet{ross_arbitrage_1976} introduced the concepts of state-prices and stochastic discount factors (SDF, also called "pricing kernels"), which represent the risk-neutral value of future payoff states and the weight investors apply to those states, respectively. \citet{breeden_prices_1978} then presented a method for extracting risk-neutral densities using call option prices across different strikes, enabling a generation of researchers to explore impirical methods for deriving insights from options prices.
+  Risk-neutral densities (RNDs) have fascinated researchers in financial engineering ever since \citet{black_pricing_1973} first published their risk-neutral method for pricing European options. In the years that followed, \citet{ross_arbitrage_1976} introduced the concepts of state-prices and stochastic discount factors (SDF, also called "pricing kernels"), which represent the risk-neutral value of future payoff states and the weight investors apply to those states, respectively. \citet{breeden_prices_1978} then presented a method for extracting risk-neutral densities using call option prices across different strikes, enabling a generation of researchers to explore empirical methods for deriving insights from options prices.
 
   One such insight is depicted in \citet{figlewski_risk-neutral_2018}: when compared against a lognormal distribution with volatility derived from a weighted combination of historical volatility and the VIX, the options-implied RND displays a noticeable negative skew and body that is shifted to the right. The ratio of the two distributions discounted by the risk-free rate produces a pricing kernel that places heavy weight on lower states with a temporary "hill" at intermediate higher states before continuing to slope downward. This common and well-documented behavior contrasts starkly with the downward-sloping monotonicity predicted by utility theory, producing a conundrum that \citet{jackwerth_option-implied_2004} calls the "pricing kernel puzzle".
 
-  At the same time, another commonly observed phenomenon known as the "volatility smile" reveals that options with different strikes generate different implied volatilities, suggesting that the market incorporates additional risk-premia for strikes far from the underlying. Are these extra, strike-dependent premia due to market participants anticipating higher real-world probabilities for these future states, or are they the result of asymetrical, wealth-dependent aversion to large losses and preference toward modest gains? \citet{jackwerth_option-implied_2004}, \citet{figlewski_risk-netrual_2018}, \citet{shiratsuka_information_2001}, and \citet{anagnou_relation_2002} all indicate that RNDs are poor predictors of real-world probabilities while acknowledging the difficulties in ruling them out definitively. 
+  At the same time, another commonly observed phenomenon known as the "volatility smile" reveals that options with different strikes generate different implied volatilities, suggesting that the market incorporates additional risk-premia for strikes far from the underlying. Are these strike-dependent premia due to market participants anticipating higher real-world probabilities for these future states, or are they the result of asymetrical, wealth-dependent aversion to large losses and preference toward modest gains? \citet{jackwerth_option-implied_2004}, \citet{figlewski_risk-netrual_2018}, \citet{shiratsuka_information_2001}, and \citet{anagnou_relation_2002} all indicate that RNDs are poor predictors of real-world probabilities while acknowledging the difficulties in ruling them out as predictors. 
 
 \section{Objectives}
   \label{objectives}
-  Describe the major theme, including how this work offers a contribution or extension of the topic.
-
-  Questions of Interest:
+  I initially planned to develop an RND-based model for estimating future price distributions, but upon discovering multiple authors who have indicated this cannot be done, I have broadened the scope of my investigation to address a handful of questions that arose in the course of my background reading. These questions are:
   \begin{enumerate}
     \item To what extent do the "market-wide" state-prices (modeled as market-dependent stock states via CAPM) and their corresponding risk-neutral probabilities match the risk-neutral probabilities implied by options prices on indices and individual stocks?
     \item To what extent do RNDs for different maturities exhibit a term structure that can be used to model path-dependent options?
@@ -76,10 +70,45 @@
     \item To what extent do differences in call/put implied volatilities effect pricing kernels, Q-measure probabilities, and P-measure probabilities?
     \item To what extent are delta-implied probabilities consistent with P- or Q- measure probabilities, and how does this relationship vary with risk-neutral probability?
   \end{enumerate}
+  That multiple authors have argued against using RNDs for prediction does not necessarily mean it is impossible, but their arguments for why it \textit{might} not be possible are compelling enough to merit further analysis. In the event my analysis of recent data supports their claims, this result alone may be worthy of publication. At the very least, the questions above should provided sufficient opportunity for exploration.
 
 \section{Theory}
   \label{theory}
-  Explain any assumptions, weakness, or gaps.
+  Consider a stock with two possible future states "up" and "down" and bond, both priced at \$1:
+  \begin{align}
+    \text{Let } \pi &= \text{state-price}\\
+    S &= \text{stock state}\\
+    B &= \text{bond price}\\
+    S_0 &= 1 = \pi_{up} S_{up} + \pi_{down} S_{down}\\
+    B_0 &= 1 = \pi_{up} B_{up} + \pi_{down} B_{down}
+  \end{align}
+
+  Since the bond's future price is the same regardless of state, $B_{up} = B_{down} = 1 + r$ and the state-prices are determined entirely by the state space $\{S_{up}, S_{down}\}$ and interest rate $r$. This is the one-period, two-state economy described in \citet{jackwerth_option-implied_2004} as an illustrative example of discrete state prices.
+
+  If we try to extend this to an economy with more than one stock, we encounter a problem: the two stocks may vary independently, resulting in an explosion of potential states. For example, with just two stocks ($S_1$ and $S_2$) and two states each ("u" and "d"), we now have four potential states to deal with: $\{(S_{1u}, S_{2u}), (S_{1u}, S_{2d}), (S_{1d}, S_{2u}), (S_{1d}, S_{2d})\}$. This produces three equations and four unkown state-prices -- an underdetermined system of equations. 
+
+  My first question, stated in section \ref{objectives}, supposes we parametrize the future stock-states by the market state via CAPM. Doing so produces the following system of $N$ equations:
+  \begin{align}
+      S^{\ast}_{1} &= \pi_{1} S_{1,1} + \pi_{2} S_{1,2} + \mathellipsis + \pi_{N} S_{1,N}\\
+      S^{\ast}_{2} &= \pi_{1} S_{2,1} + \pi_{2} S_{2,2} + \mathellipsis + \pi_{N} S_{2,N}\\
+      \vdots\\
+      S^{\ast}_{N-1} &= \pi_{1} S_{N-1,1} + \pi_{2} S_{N-1,2} + \mathellipsis + \pi_{N} S_{N-1,N}\\
+      B^{\ast} &= B_f  	\displaystyle\sum_{j}^N{\pi_{j}}
+  \end{align}
+  where $N-1$ is the number of stocks in the economy, $N$ is the number of discretize market states, the asterisk indicates present observable prices, and $B_f$ is used to represent the future value of the bond, which is invariant with market state. Each state-price can be thought of as the product of anticipated real-world probabilities $p_j$ and pricing kernels $m_j$ representing the market's aggregate risk preferences:
+  \begin{align}
+    \pi_j = p_j m_j
+  \end{align}
+
+  The CAPM allows us to model a stock's returns as a linear function of the risk-free rate $r_f$, the market return $r_j$, and the stock's beta $\beta_i$:
+  \[r_{ij} = r_f + \beta_i (r_j - r_f) + \epsilon\]
+  with some normal random error $\epsilon$. In this formulation, the future state for each stock $i$ is estimated as the expectation under CAPM:
+  \begin{align}
+    S_{ij} &=  E[S^{\ast}_i (1 + r_{ij})]\\
+    S_{ij} &= S^{\ast}_i (1 + r_f + \beta_i (r_j - r_f))
+  \end{align}
+  
+  Parametrizing future states by the market's return via CAPM allows us to represent $N$ colinear states using $N$ equations, resulting in a fully determined system that can be solved lienarly. Since betas are widely used as a measure of a stock's performance relative to the market, I propose that the state-prices baked into option-implied risk-neutral densities may be the result of market participants using CAPM. I would like to explore this possibility empirically.
 
 \section{Plan}
   \label{plan}
@@ -87,8 +116,6 @@
 
 \section{Methodology}
   \label{methodology}
-
-  \subsection{Interest Rates}
   
   \subsection{Data}
   \label{data}
@@ -96,30 +123,26 @@
     
     In the event that we need to examine dividend-paying stocks, we will obtain historical dividend data from EODHD.com. In the worst case where we cannot download sufficient dividend data, we will obtain it manually from dividendhistory.org.
 
+  \subsection{Interest Rates}
   \label{interest-rates}
-    To model interest rates, we draw inspiration from \citet{jackwerth_recovering_2000}, who used same-maturity SPX option prices and put-call parity to compute a distribution of implied rates for each day, taking the median as the risk-free rate. Depending on the stability of this approach with our available data, we may also consider deflating intraday option quotes according to their remaining time-to-maturity in order to increase our sample size before taking the median implied rate for each day. Since interest rates don't change much during trading hours, this approach is acceptable.
+    To model interest rates, we draw inspiration from \citet{jackwerth_recovering_2000}, who used EOD prices from same-maturity SPX options and put-call parity to compute a distribution of implied rates for each day, taking the median as the risk-free rate. Depending on the stability of this approach with our available data, we may also consider deflating intraday option quotes according to their remaining time-to-maturity in order to increase our sample size before taking the median implied rate for each day. Since interest rates don't change much during trading hours, this approach is should provide more sample from which to estimate daily interest rates.
 
 \section{Other Real-Life Applications}
   \label{applications}
   Explain any assumptions, weakness, or gaps.
 
-\section{Relevant Literature}
-  \label{literature}
-  Explain relevant literature.
-
 
 %% The Appendices part is started with the command \appendix;
 %% appendix sections are then done as normal sections
-\appendix
-  \section{First Appendix}
-    \label{app1}
-    Appendix text.
+% \appendix
+%   \section{First Appendix}
+%     \label{app1}
+%     Appendix text.
 
-    %% For citations use: 
-    %%       \citet{<label>} ==> Lamport (1994)
-    %%       \citep{<label>} ==> (Lamport, 1994)
-    %%
-    See \citet{jackwerth_option-implied_2004}.
+%     %% For citations use: 
+%     %%       \citet{<label>} ==> Lamport (1994)
+%     %%       \citep{<label>} ==> (Lamport, 1994)
+%     %%
 
 
 \bibliographystyle{elsarticle-harv} 
