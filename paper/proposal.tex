@@ -29,7 +29,7 @@
 
     \author{Ryan Cardenas}
     \ead{cardenasr913@gmail.com}
-    \affiliation{organization={WorldQuant University}}
+    \affiliation{organization={WorldQuant University},}
 
     %% Abstract
     \begin{abstract}
@@ -48,8 +48,15 @@
 %% Use \section commands to start a section
 \section{Background}
   \label{background}
-  Describe the following: Concepts - weaknesses, strengths, or gaps; Contribution or extension of the topic; 
-  Existing pain points in Financial Engineering and how this approach can help.
+  \textit{Describe the following: Concepts - weaknesses, strengths, or gaps; Contribution or extension of the topic; 
+  Existing pain points in Financial Engineering and how this approach can help.}
+
+  
+  Risk-neutral densities (RNDs) have fascinated researchers in financial engineering ever since \citet{black_pricing_1973} first published their risk-neutral method for pricing European options. In the years that followed, \citet{ross_arbitrage_1976} introduced the concepts of state-prices and stochastic discount factors (SDF, also called "pricing kernels"), which represent the risk-neutral value of future payoff states and the weight investors apply to those states, respectively. \citet{breeden_prices_1978} then presented a method for extracting risk-neutral densities using call option prices across different strikes, enabling a generation of researchers to explore impirical methods for deriving insights from options prices.
+
+  One such insight is depicted in \citet{figlewski_risk-neutral_2018}: when compared against a lognormal distribution with volatility derived from a weighted combination of historical volatility and the VIX, the options-implied RND displays a noticeable negative skew and body that is shifted to the right. The ratio of the two distributions discounted by the risk-free rate produces a pricing kernel that places heavy weight on lower states with a temporary "hill" at intermediate higher states before continuing to slope downward. This common and well-documented behavior contrasts starkly with the downward-sloping monotonicity predicted by utility theory, producing a conundrum that \citet{jackwerth_option-implied_2004} calls the "pricing kernel puzzle".
+
+  At the same time, another commonly observed phenomenon known as the "volatility smile" reveals that options with different strikes generate different implied volatilities, suggesting that the market incorporates additional risk-premia for strikes far from the underlying. Are these extra, strike-dependent premia due to market participants anticipating higher real-world probabilities for these future states, or are they the result of asymetrical, wealth-dependent aversion to large losses and preference toward modest gains? \citet{jackwerth_option-implied_2004}, \citet{figlewski_risk-netrual_2018}, \citet{shiratsuka_information_2001}, and \citet{anagnou_relation_2002} all indicate that RNDs are poor predictors of real-world probabilities while acknowledging the difficulties in ruling them out definitively. 
 
 \section{Objectives}
   \label{objectives}
@@ -59,14 +66,15 @@
   \begin{enumerate}
     \item To what extent do the "market-wide" state-prices (modeled as market-dependent stock states via CAPM) and their corresponding risk-neutral probabilities match the risk-neutral probabilities implied by options prices on indices and individual stocks?
     \item To what extent do RNDs for different maturities exhibit a term structure that can be used to model path-dependent options?
-    \item How can I derive historical real probabilities from risk-neutral densities, and how do these compare to empirical distributions of asset returns?
+    \item Can real-world probabilities be derived from risk-neutral densities, and how do either set of probabilities compare to empirical distributions of asset returns?
     \item How does variance risk premium vary with risk-free rate?
     \item How does IV (as a function of moneyness) vary with risk-free rate?
-    \item How do IV curves and theire associated RNDs change over time?
+    \item How do IV curves and their associated RNDs change over time?
     \item How do pricing kernels vary with recent volatility?
     \item Can a ML model be trained to extract the pricing kernel?
     \item To what extent do early-exercise premiums in American puts (for non-dividend-paying stocks) match or predict Q-measure and P-measure probabilities?
     \item To what extent do differences in call/put implied volatilities effect pricing kernels, Q-measure probabilities, and P-measure probabilities?
+    \item To what extent are delta-implied probabilities consistent with P- or Q- measure probabilities, and how does this relationship vary with risk-neutral probability?
   \end{enumerate}
 
 \section{Theory}
@@ -79,9 +87,17 @@
 
 \section{Methodology}
   \label{methodology}
-  To model interest rates, intraday SPX option prices provide inputs to put-call parity, resulting in a series of implied rates for each strike throughout the day. Since strikes far from the underlying price tend to exhibit higher stochastic discount factors, and since these factors are difficult to estimate without already knowing the risk-free rate, we will use only ATM and near-ATM strikes. Accounting for the small, but non-zero differences in time-to-maturity throughout the day, we arrive at a distribution of implied interest rates, the median of which will serve as our estimated risk-free rate for that day.
 
+  \subsection{Interest Rates}
+  
+  \subsection{Data}
+  \label{data}
+    We will use unadjusted historical index, stock, and options data obtained from FirstRateData.com. This data includes daily OHLCV and intraday quotes at 1-minute intervals. While adjusted data would make some parts of our analysis easier, options are priced in relation to undadjusted underlying prices (for non-dividend-paying stocks), so we will need to write code to identify splits and reverse splits. 
+    
+    In the event that we need to examine dividend-paying stocks, we will obtain historical dividend data from EODHD.com. In the worst case where we cannot download sufficient dividend data, we will obtain it manually from dividendhistory.org.
 
+  \label{interest-rates}
+    To model interest rates, we draw inspiration from \citet{jackwerth_recovering_2000}, who used same-maturity SPX option prices and put-call parity to compute a distribution of implied rates for each day, taking the median as the risk-free rate. Depending on the stability of this approach with our available data, we may also consider deflating intraday option quotes according to their remaining time-to-maturity in order to increase our sample size before taking the median implied rate for each day. Since interest rates don't change much during trading hours, this approach is acceptable.
 
 \section{Other Real-Life Applications}
   \label{applications}
@@ -103,7 +119,7 @@
     %%       \citet{<label>} ==> Lamport (1994)
     %%       \citep{<label>} ==> (Lamport, 1994)
     %%
-    See \citet{jackwerth_option_implied_2004}.
+    See \citet{jackwerth_option-implied_2004}.
 
 
 \bibliographystyle{elsarticle-harv} 
