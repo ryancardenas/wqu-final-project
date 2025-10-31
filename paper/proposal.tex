@@ -22,6 +22,7 @@
 
 \begin{document}
 
+
 \begin{frontmatter}
 
     \title{Project Proposal: Exploration of Risk Neutral Density and Pricing Kernels in Equity Markets\tnoteref{t1}}
@@ -34,7 +35,7 @@
     %% Abstract
     \begin{abstract}
     %% Text of abstract
-    Abstract text.
+    This project will explore various questions related to risk-neutral densities derived from options prices, focusing on American options for non-dividend-paying stocks (for simplicity). 
     \end{abstract}
 
     %% Keywords
@@ -54,6 +55,7 @@
 
   At the same time, another commonly observed phenomenon known as the "volatility smile" reveals that options with different strikes generate different implied volatilities, suggesting that the market incorporates additional risk-premia for strikes far from the underlying. Are these strike-dependent premia due to market participants anticipating higher real-world probabilities for these future states, or are they the result of asymetrical, wealth-dependent aversion to large losses and preference toward modest gains? \citet{jackwerth_option-implied_2004}, \citet{figlewski_risk-netrual_2018}, \citet{shiratsuka_information_2001}, and \citet{anagnou_relation_2002} all indicate that RNDs are poor predictors of real-world probabilities while acknowledging the difficulties in ruling them out as predictors. 
 
+
 \section{Objectives}
   \label{objectives}
   I initially planned to develop an RND-based model for estimating future price distributions, but upon discovering multiple authors who have indicated this cannot be done, I have broadened the scope of my investigation to address a handful of questions that arose in the course of my background reading. These questions are:
@@ -70,7 +72,8 @@
     \item To what extent do differences in call/put implied volatilities effect pricing kernels, Q-measure probabilities, and P-measure probabilities?
     \item To what extent are delta-implied probabilities consistent with P- or Q- measure probabilities, and how does this relationship vary with risk-neutral probability?
   \end{enumerate}
-  That multiple authors have argued against using RNDs for prediction does not necessarily mean it is impossible, but their arguments for why it \textit{might} not be possible are compelling enough to merit further analysis. In the event my analysis of recent data supports their claims, this result alone may be worthy of publication. At the very least, the questions above should provided sufficient opportunity for exploration.
+  That multiple authors have argued against using RNDs for prediction does not necessarily mean it is impossible, but their arguments for why it \textit{might} not be possible are compelling enough to merit further analysis. In the event my analysis of recent market data confirms their claims, this result alone may be worthy of publication. At the very least, the questions above should provided sufficient opportunity for exploration.
+
 
 \section{Theory}
   \label{theory}
@@ -87,7 +90,7 @@
 
   If we try to extend this to an economy with more than one stock, we encounter a problem: the two stocks may vary independently, resulting in an explosion of potential states. For example, with just two stocks ($S_1$ and $S_2$) and two states each ("u" and "d"), we now have four potential states to deal with: $\{(S_{1u}, S_{2u}), (S_{1u}, S_{2d}), (S_{1d}, S_{2u}), (S_{1d}, S_{2d})\}$. This produces three equations and four unkown state-prices -- an underdetermined system of equations. 
 
-  My first question, stated in section \ref{objectives}, supposes we parametrize the future stock-states by the market state via CAPM. Doing so produces the following system of $N$ equations:
+  My first question, stated in Section \ref{objectives}, supposes we parametrize the future stock-states by the market state via CAPM. Doing so produces the following system of $N$ equations:
   \begin{align}
       S^{\ast}_{1} &= \pi_{1} S_{1,1} + \pi_{2} S_{1,2} + \mathellipsis + \pi_{N} S_{1,N}\\
       S^{\ast}_{2} &= \pi_{1} S_{2,1} + \pi_{2} S_{2,2} + \mathellipsis + \pi_{N} S_{2,N}\\
@@ -104,45 +107,46 @@
   \[r_{ij} = r_f + \beta_i (r_j - r_f) + \epsilon\]
   with some normal random error $\epsilon$. In this formulation, the future state for each stock $i$ is estimated as the expectation under CAPM:
   \begin{align}
-    S_{ij} &=  E[S^{\ast}_i (1 + r_{ij})]\\
+    S_{ij} &=  \mathbb{E}[S^{\ast}_i (1 + r_{ij})]\\
     S_{ij} &= S^{\ast}_i (1 + r_f + \beta_i (r_j - r_f))
   \end{align}
   
-  Parametrizing future states by the market's return via CAPM allows us to represent $N$ colinear states using $N$ equations, resulting in a fully determined system that can be solved lienarly. Since betas are widely used as a measure of a stock's performance relative to the market, I propose that the state-prices baked into option-implied risk-neutral densities may be the result of market participants using CAPM. I would like to explore this possibility empirically.
+  Parametrizing future states by the market's return via CAPM allows us to represent $N$ colinear states using $N$ equations, resulting in a fully determined system that can be solved lienarly. Since betas are widely used as a measure of a stock's performance relative to the market, I propose that the state-prices baked into option-implied risk-neutral densities may be the result of market participants using CAPM or similar factor-based models in their forward outlook. I would like to explore this possibility empirically.
+
+  The second question approaches RNDs for options with different maturities from the perspective of modeling interest rates over various terms: namely, is there an implied term structure in RNDs that could shed light on the pricing of path-dependent American options?
+
 
 \section{Plan}
   \label{plan}
-  Explain strengths or gaps
+  The majority of my efforts thus far have focused on understanding the intuition behind risk-neutral measures and reading the core literature surrounding the topic. As part of this process, I wrote down a series of questions (shown in Section \ref{objectives}) that arose while pondering the implications of what I read.
+
+  The second step I took was to set up a git repo, a coding environment, and an Elsevier latex template that I will use for writing the git-versioned paper.
+
+  Third, I formulated the N-1 economy using CAPM-parametrized market states to enable state-prices to be solved. It remains to be seen whether these discrete state-prices can be translated into a continuous RND that agrees with options prices or realized returns. Before I can explore this question in detail, I will need to first extract effective interest rates from options prices using put-call parity, a process I will conduct primarily on SPX options (but may verify with options on other highly liquid, non-dividend-paying stocks).
+
+  Once I have extracted the options-implied risk-free rate for each day, I will use those values to solve the inverse problem of extracting implied volatilities from options prices under the Black-Scholes model. I will then apply Shimko's method \citep{shimko_bounds_1993} of transforming options prices into implied volatilities (which tend to be more similar in magnitude than prices), fit them to a smooth curve, and then transform the smoothed IVs back into price-space. To these smoothed prices, I will then apply the Breeden-Litzenberger \citep{breeden_prices_1978} equation to compute the risk-neutral density for each day -- for calls and also for puts. Where some practitioners utilize both calls and puts to derive the RND, I am interested in the exploring how the RNDs generated by calls and puts differ from each other.
+
+  To address the first question from Section \ref{objectives}, I will need to identify a universe of 20-200 liquid, optionable stocks. More stocks will mean that I can represent a larger number of future market states. In particular, I will look for stocks that do not pay dividends, which will greatly simplify the data processing requirements by not having to estimate a continuous dividend factor -- or worse, account for each dividend discretely.
+
+  From this point, I will be able to address most of the remaining questions posed in Section \ref{objectives}. The rest can be tackled using option and stock prices without computing IVs.
 
 \section{Methodology}
   \label{methodology}
   
   \subsection{Data}
-  \label{data}
     We will use unadjusted historical index, stock, and options data obtained from FirstRateData.com. This data includes daily OHLCV and intraday quotes at 1-minute intervals. While adjusted data would make some parts of our analysis easier, options are priced in relation to undadjusted underlying prices (for non-dividend-paying stocks), so we will need to write code to identify splits and reverse splits. 
     
     In the event that we need to examine dividend-paying stocks, we will obtain historical dividend data from EODHD.com. In the worst case where we cannot download sufficient dividend data, we will obtain it manually from dividendhistory.org.
 
   \subsection{Interest Rates}
-  \label{interest-rates}
     To model interest rates, we draw inspiration from \citet{jackwerth_recovering_2000}, who used EOD prices from same-maturity SPX options and put-call parity to compute a distribution of implied rates for each day, taking the median as the risk-free rate. Depending on the stability of this approach with our available data, we may also consider deflating intraday option quotes according to their remaining time-to-maturity in order to increase our sample size before taking the median implied rate for each day. Since interest rates don't change much during trading hours, this approach is should provide more sample from which to estimate daily interest rates.
+
+  \subsection{Comparing RND to Real-World Probabilities}
+    One challenge with comparing option-implied risk-neutral probabilities to real-world probabilities is that neither distribution is stationary: both distributions change as the market accounts for new information. Not only do the statistical moments change over time, but the distributional forms may vary from one market context to another. For this reason, I will apply a nonparametric approach that computes the quantile of the realized price within its respective RND. Treating each risk-neutral distribution as a random variable $\theta$, one can envision a meta-distribution $Q$ from which $\theta$ is sampled. If $Q$ tends to generate RNDs that are good predictors of future stock prices, then I would expect the overall errors of the generation process to be roughly normal wth zero bias and lower variance than a naive predictor. Alternatively, the errors may have a significant bias suggesting that the market consistently overestimates or underestimates future returns. In the worst case, the errors will have no bias but extremely wide variance, suggesting the RND is no more useful than anticipating zero returns.
 
 \section{Other Real-Life Applications}
   \label{applications}
-  Explain any assumptions, weakness, or gaps.
-
-
-%% The Appendices part is started with the command \appendix;
-%% appendix sections are then done as normal sections
-% \appendix
-%   \section{First Appendix}
-%     \label{app1}
-%     Appendix text.
-
-%     %% For citations use: 
-%     %%       \citet{<label>} ==> Lamport (1994)
-%     %%       \citep{<label>} ==> (Lamport, 1994)
-%     %%
+  Findings from this project can be used to develop profitable trading strategies, price options more accurately, develop more robust hedging strategies to mitigate real-world risk, or compare inefficiencies in equity derivative markets to inefficiencies in other option-like markets such as mortgages and insurance policies. While there may exist some parallels to be drawn between the P- and Q-measure relationships in other fields like physics, this project will focus on implications in the realm of finance.
 
 
 \bibliographystyle{elsarticle-harv} 
