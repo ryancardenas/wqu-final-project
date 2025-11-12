@@ -1,14 +1,14 @@
 repos:
   - repo: https://github.com/psf/black
-    rev: 25.1.0 # Use latest stable version
+    rev: 25.11.0 # Use latest stable version
     hooks:
       - id: black
   - repo: https://github.com/PyCQA/isort
-    rev: 6.0.1
+    rev: 7.0.0
     hooks:
       - id: isort
   - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.9.0
+    rev: 1.9.1
     hooks:
       - id: nbqa-black
       - id: nbqa-isort
@@ -19,6 +19,6 @@ repos:
     hooks:
       - id: flake8
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.18.1
+    rev: v1.18.2
     hooks:
       - id: mypy
