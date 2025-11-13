@@ -74,7 +74,7 @@ class BSCall:
         r: Numeric,
         sigma: Numeric,
         q: Numeric = 0,
-    ) -> tuple[Numeric, Numeric, Numeric, Numeric, Numeric]:
+    ) -> tuple[Numeric, Numeric, Numeric, Numeric, Numeric, Numeric]:
         """Computes Black-Scholes call greeks for European options.
 
         Parameters
@@ -100,8 +100,9 @@ class BSCall:
 
         Returns
         -------
-        (c_delta, c_theta, c_rho, gamma, vega) : tuple of floats
-            The delta, theta, rho, gamma, and vega of the call option.
+        (c_delta, c_theta, c_rho, gamma, vega, c_pitm) : tuple of floats
+            The delta, theta (per calendar day), rho, gamma, vega, and Prob(ITM) of the
+            call option.
         """
         assert T > 0, "T must be greater than 0"
 
@@ -109,17 +110,18 @@ class BSCall:
         d1 = (np.log(S0 / K) + (r - q + 0.5 * sigma**2) * T) / vol
         d2 = d1 - vol
 
-        c_delta = np.exp(-q * T) * norm.cdf(d1)
+        c_delta = np.exp(-q * T) * norm.cdf(d1)  #
         c_theta = (
             -S0 * np.exp(-q * T) * norm.pdf(d1) * sigma / (2 * np.sqrt(T))
             - r * K * np.exp(-r * T) * norm.cdf(d2)
             + q * S0 * np.exp(-q * T) * norm.cdf(d1)
-        )
+        ) / 365  # theta per calendar day
         c_rho = K * T * np.exp(-r * T) * norm.cdf(d2)
         gamma = np.exp(-q * T) * norm.pdf(d1) / (S0 * vol)
         vega = S0 * np.exp(-q * T) * norm.pdf(d1) * np.sqrt(T)
+        c_pitm = norm.cdf(d2)
 
-        return (c_delta, c_theta, c_rho, gamma, vega)
+        return (c_delta, c_theta, c_rho, gamma, vega, c_pitm)
 
     def delta(
         self,
@@ -159,7 +161,7 @@ class BSCall:
             -S0 * np.exp(-q * T) * norm.pdf(d1) * sigma / (2 * np.sqrt(T))
             - r * K * np.exp(-r * T) * norm.cdf(d2)
             + q * S0 * np.exp(-q * T) * norm.cdf(d1)
-        )
+        ) / 365  # per calendar day
         return c_theta
 
     def rho(
@@ -275,7 +277,7 @@ class BSPut:
         r: Numeric,
         sigma: Numeric,
         q: Numeric = 0,
-    ) -> tuple[Numeric, Numeric, Numeric, Numeric, Numeric]:
+    ) -> tuple[Numeric, Numeric, Numeric, Numeric, Numeric, Numeric]:
         """Computes Black-Scholes put greeks for European options.
 
         Parameters
@@ -301,8 +303,9 @@ class BSPut:
 
         Returns
         -------
-        (p_delta, p_theta, p_rho, gamma, vega) : tuple of floats
-            The delta, theta, rho, gamma, and vega of the put option.
+        (p_delta, p_theta, p_rho, gamma, vega, p_pitm) : tuple of floats
+            The delta, theta (per calendar day), rho, gamma, vega, and Prob(ITM) of the
+            put option.
         """
         assert T > 0, "T must be greater than 0"
 
@@ -315,12 +318,13 @@ class BSPut:
             -S0 * np.exp(-q * T) * norm.pdf(d1) * sigma / (2 * np.sqrt(T))
             + r * K * np.exp(-r * T) * norm.cdf(-d2)
             - q * S0 * np.exp(-q * T) * norm.cdf(-d1)
-        )
+        ) / 365  # per calendar day
         p_rho = -K * T * np.exp(-r * T) * norm.cdf(-d2)
         gamma = np.exp(-q * T) * norm.pdf(d1) / (S0 * vol)
         vega = S0 * np.exp(-q * T) * norm.pdf(d1) * np.sqrt(T)
+        p_pitm = norm.cdf(-d2)
 
-        return (p_delta, p_theta, p_rho, gamma, vega)
+        return (p_delta, p_theta, p_rho, gamma, vega, p_pitm)
 
     def delta(
         self,
@@ -360,7 +364,7 @@ class BSPut:
             -S0 * np.exp(-q * T) * norm.pdf(d1) * sigma / (2 * np.sqrt(T))
             + r * K * np.exp(-r * T) * norm.cdf(-d2)
             - q * S0 * np.exp(-q * T) * norm.cdf(-d1)
-        )
+        ) / 365  # per calendar day
         return p_theta
 
     def rho(
