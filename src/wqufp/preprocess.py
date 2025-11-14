@@ -74,7 +74,7 @@ def get_index_data() -> pd.DataFrame:
     spx_df.index = pd.to_datetime(spx_df.index)
 
     # Join with Shiller's dividend yield
-    shiller = get_shiller_dividend_yield
+    shiller = get_shiller_dividend_yield()
     spx_df = spx_df.join(shiller, how="left")
     spx_df.loc[:, "q"] = spx_df["q"].ffill()
     spx_df.dropna(inplace=True)
@@ -97,9 +97,11 @@ def load_concatenate_options_files(
     opt_df = pd.DataFrame()
     for i in tqdm(range(len(opt_fn_list))):
         tmp = pd.read_csv(opt_fn_list[i], names=cols)
+
         # Ignore out-of-range deltas
         upper_delta_threshold = tmp["delta"].abs() < 1.0
         lower_delta_threshold = tmp["delta"].abs() > 0.0
+
         # Filter out 0 DTE options
         not_zero_dte = tmp["trade date"] != tmp["expiry date"]
         tmp = tmp[
@@ -107,7 +109,7 @@ def load_concatenate_options_files(
         ].reset_index(drop=True)
         opt_df = pd.concat([opt_df, tmp], ignore_index=True)
 
-        print("Filtering invalid MID prices...")
+        # Filter invalid MID prices
         opt_df["mid price"] = (opt_df["bid price"] + opt_df["ask price"]) / 2
         opt_df = opt_df[opt_df["mid price"] > 0].reset_index(drop=True)
 
@@ -356,7 +358,7 @@ def compute_options_greeks(
         opt_df.loc[i, "vega_"] = vega
         opt_df.loc[i, "pitm_"] = p_itm
 
-        return opt_df
+    return opt_df
 
 
 if __name__ == "__main__":
@@ -401,6 +403,7 @@ if __name__ == "__main__":
         opt_df = pd.concat([call_df, put_df], ignore_index=True)
         opt_df = compute_options_greeks(opt_df=opt_df)
 
+        print("Saving to disk...")
         trg_path_csv = TRG_OPT_DF_DIR / (data_year + ".csv")
         opt_df.to_csv(trg_path_csv, index=False)
         opt_df.to_hdf(
