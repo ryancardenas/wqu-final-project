@@ -152,6 +152,10 @@ def compute_contract_durations_and_types(
     )
     opt_df["standard"] = is_friday & is_third_week
 
+    # Need to filter out 0 DTE options after correcting 'expiry date' for Saturday
+    # convention.
+    opt_df = opt_df[opt_df["dte"] > 0]
+
     return opt_df
 
 
