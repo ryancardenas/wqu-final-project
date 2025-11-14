@@ -87,7 +87,7 @@ def load_concatenate_options_files(
     verbose: int = 1,
 ) -> pd.DataFrame:
     """Iterates through each filepath in opt_fn_list, loading the data and filtering
-    out invalid deltas/DTE/MIDs, and then concatenates the results.
+    out invalid deltas/strikes/DTE/MIDs, and then concatenates the results.
 
     Returns
     -------
@@ -104,10 +104,15 @@ def load_concatenate_options_files(
         upper_delta_threshold = tmp["delta"].abs() < 1.0
         lower_delta_threshold = tmp["delta"].abs() > 0.0
 
+        # Filter invalid strikes
+        valid_strikes = tmp["strike"] > 0
+
         # Filter out 0 DTE options
         not_zero_dte = tmp["trade date"] != tmp["expiry date"]
+
+        # Apply filters
         tmp = tmp[
-            upper_delta_threshold & lower_delta_threshold & not_zero_dte
+            upper_delta_threshold & lower_delta_threshold & valid_strikes & not_zero_dte
         ].reset_index(drop=True)
         opt_df = pd.concat([opt_df, tmp], ignore_index=True)
 
@@ -365,6 +370,32 @@ def compute_options_greeks(
         opt_df.loc[i, "pitm_"] = p_itm
 
     return opt_df
+
+
+def rebuild_hdf5(fn_stem: str = "options_rebuilt", complevel: int = 9) -> None:
+    """Helper function for rebuilding HDF5 file from batch CSV files without having
+    to recompute options Greeks, which would take a long time. This is not called
+    within the __main__ script, but is included here in case __main__ fails to
+    aggregate the CSV files into an HDF5 file.
+    """
+    trg_path_hdf5 = TRG_OPT_DF_DIR / f"{fn_stem}.hdf5"
+    opt_fn_list = sorted(list(TRG_OPT_DF_DIR.glob("*.csv")))
+    acquired_dtypes = False
+    for opt_fn in tqdm(opt_fn_list):
+        df = pd.read_csv(opt_fn)
+        if not acquired_dtypes:
+            dtypes = df.dtypes
+            acquired_dtypes = True
+        df.astype(dtypes).to_hdf(
+            path_or_buf=trg_path_hdf5,
+            key="options",
+            mode="a",
+            complevel=complevel,
+            complib="zlib",
+            format="table",
+            append=True,
+        )
+    print("Processing complete!")
 
 
 if __name__ == "__main__":
