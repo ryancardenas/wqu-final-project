@@ -82,7 +82,9 @@ def get_index_data() -> pd.DataFrame:
 
 
 def load_concatenate_options_files(
-    opt_fn_list: list[str], verbose: int = 1
+    opt_fn_list: list[str],
+    cols: list[str],
+    verbose: int = 1,
 ) -> pd.DataFrame:
     """Iterates through each filepath in opt_fn_list, loading the data and filtering
     out invalid deltas/DTE/MIDs, and then concatenates the results.
@@ -395,7 +397,7 @@ if __name__ == "__main__":
         print(f"Processing Year: {data_year}")
         opt_fn_list = sorted(glob.glob(options_dir + f"/SPX/*_{data_year}_*"))
 
-        opt_df = load_concatenate_options_files(opt_fn_list=opt_fn_list)
+        opt_df = load_concatenate_options_files(opt_fn_list=opt_fn_list, cols=cols)
         opt_df = compute_contract_durations_and_types(opt_df=opt_df)
         opt_df = apply_underlying_price_at_expiry(opt_df=opt_df)
         opt_df = apply_underlying_price_and_yield_at_entry(opt_df=opt_df)
