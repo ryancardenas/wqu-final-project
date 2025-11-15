@@ -85,7 +85,6 @@ def get_index_data() -> pd.DataFrame:
 def load_concatenate_options_files(
     opt_fn_list: list[str],
     cols: list[str],
-    verbose: int = 1,
 ) -> pd.DataFrame:
     """Iterates through each filepath in opt_fn_list, loading the data and filtering
     out invalid deltas/strikes/DTE/MIDs, and then concatenates the results.
@@ -95,10 +94,8 @@ def load_concatenate_options_files(
     opt_df: pd.DataFrame
         Concatenated and filtered options data.
     """
-    if verbose >= 1:
-        print("Loading options files into memory...")
     opt_df = pd.DataFrame()
-    for i in tqdm(range(len(opt_fn_list))):
+    for i in tqdm(range(len(opt_fn_list)), desc="Loading options files into memory..."):
         tmp = pd.read_csv(opt_fn_list[i], names=cols)
 
         # Ignore out-of-range deltas
@@ -331,8 +328,9 @@ def compute_options_greeks(
         out_suffix = "_shimko"
         msg_insert = " via Shimko's method"
 
-    print(f"Computing options Greeks{msg_insert}...")
-    for i in tqdm(range(opt_df.shape[0])):
+    for i in tqdm(
+        range(opt_df.shape[0]), desc=f"Computing options Greeks{msg_insert}..."
+    ):
         row = opt_df.iloc[i]
 
         opt_type = row["call/put"]
@@ -442,7 +440,9 @@ def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.Data
         + new_cols
     )
 
-    for trade_date in tqdm(ladder["trade date"].unique(), desc="iterating trade dates"):
+    for trade_date in tqdm(
+        ladder["trade date"].unique(), desc="Computing rf and q via Shimko's method"
+    ):
         tmp1 = ladder[ladder["trade date"] == trade_date]
         for dte in tmp1["dte"].unique():
             tmp2 = tmp1[tmp1["dte"] == dte]
@@ -482,16 +482,15 @@ def save_to_hdf5(df: pd.DataFrame, trg_path: Path | str) -> None:
     """Append df to HDF5 file, converting datetime columns to integers (seconds since
     epoch).
     """
-    print("Appending columns to HDF5...")
     with h5py.File(trg_path, "a") as f:
-        for col in tqdm(df.columns):
+        for col in tqdm(df.columns, desc="Appending columns to HDF5"):
             dtype = df[col].dtype
             data = df[col].values
             if dtype.kind == "M":
                 data = pd.to_datetime(df[col]).astype(int).values / 1e9
                 dtype = np.float64
             elif dtype.kind == "O":
-                dtype = "U1"
+                dtype = h5py.string_dtype(encoding="utf-8", length=1)
 
             if col not in f:
                 dset = f.require_dataset(
@@ -501,7 +500,7 @@ def save_to_hdf5(df: pd.DataFrame, trg_path: Path | str) -> None:
                     dtype=dtype,
                     exact=True,
                     compression="gzip",
-                    compressio_opts=9,
+                    compression_opts=9,
                 )
             else:
                 dset = f[col]
@@ -520,7 +519,7 @@ def rebuild_hdf5(fn_stem: str = "options_rebuilt", complevel: int = 9) -> None:
     trg_path_hdf5 = TRG_OPT_DF_DIR / f"{fn_stem}.hdf5"
     opt_fn_list = sorted(list(TRG_OPT_DF_DIR.glob("*.csv")))
     acquired_dtypes = False
-    for opt_fn in tqdm(opt_fn_list):
+    for opt_fn in tqdm(opt_fn_list, desc="Rebuilding HDF5 via Pytables"):
         df = pd.read_csv(opt_fn)
         if not acquired_dtypes:
             dtypes = df.dtypes
