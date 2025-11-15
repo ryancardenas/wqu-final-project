@@ -16,7 +16,7 @@ import time
 import warnings
 from pathlib import Path
 
-# import h5py
+import h5py
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
@@ -455,11 +455,37 @@ def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.Data
     return result
 
 
-# def save_to_hdf5(df: pd.DataFrame, trg_path: Path | str, start_idx: int = 0) -> None:
-#     """Append df to HDF5 file, converting datetime columns to integers (seconds since
-#     epoch).
-#     """
-#     with h5py.File()
+def save_to_hdf5(df: pd.DataFrame, trg_path: Path | str) -> None:
+    """Append df to HDF5 file, converting datetime columns to integers (seconds since
+    epoch).
+    """
+    print("Appending columns to HDF5...")
+    with h5py.File(trg_path, "a") as f:
+        for col in tqdm(df.columns):
+            dtype = df[col].dtype
+            data = df[col].values
+            if dtype.kind == "M":
+                data = pd.to_datetime(df[col]).astype(int).values / 1e9
+                dtype = np.float64
+            elif dtype.kind == "O":
+                dtype = "U1"
+
+            if col not in f:
+                dset = f.require_dataset(
+                    name=col,
+                    shape=(0,),
+                    maxshape=(None,),
+                    dtype=dtype,
+                    exact=True,
+                    compression="gzip",
+                    compressio_opts=9,
+                )
+            else:
+                dset = f[col]
+
+            n = dset.shape[0]
+            dset.resize(n + data.shape[0], axis=0)
+            dset[n:] = data
 
 
 def rebuild_hdf5(fn_stem: str = "options_rebuilt", complevel: int = 9) -> None:
@@ -514,7 +540,6 @@ if __name__ == "__main__":
     all_opt_fn_list = sorted(glob.glob(options_dir + "/SPX/*"))
     data_years = pd.Series([c.split("_")[1] for c in all_opt_fn_list]).unique()
 
-    rows_saved = 0
     for data_year in data_years:
         print(f"Processing Year: {data_year}")
         opt_fn_list = sorted(glob.glob(options_dir + f"/SPX/*_{data_year}_*"))
@@ -537,19 +562,12 @@ if __name__ == "__main__":
         # Compute Greeks using Shimko assumptions
         opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=True)
 
-        print("Saving to disk...")
+        print("Saving to CSV...")
         trg_path_csv = TRG_OPT_DF_DIR / (data_year + ".csv")
         opt_df.to_csv(trg_path_csv, index=False)
-        opt_df.to_hdf(
-            path_or_buf=trg_path_hdf5,
-            key="options",
-            mode="a",
-            complevel=9,
-            complib="zlib",
-            format="table",
-            append=True,
-        )
-        rows_saved = opt_df.shape[0]
+
+        # Append columns to HDF5
+        save_to_hdf5(df=opt_df, trg_path=trg_path_hdf5)
 
         stop = time.perf_counter()
         print(f"Processing time elapsed: {(stop - start) / 60:.2f} minutes")
