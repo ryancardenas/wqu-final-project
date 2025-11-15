@@ -167,7 +167,9 @@ def compute_contract_durations_and_types(
     return opt_df
 
 
-def apply_underlying_price_at_expiry(opt_df: pd.DataFrame) -> pd.DataFrame:
+def apply_underlying_price_at_expiry(
+    opt_df: pd.DataFrame, spx_data: pd.DataFrame
+) -> pd.DataFrame:
     """Computes the underlying settlement price at expiry. Handles standard/non-standard
     expiry settlements.
 
@@ -179,7 +181,7 @@ def apply_underlying_price_at_expiry(opt_df: pd.DataFrame) -> pd.DataFrame:
     print("Identifying SPX CLOSE at expiry date...")
     opt_df = (
         opt_df.set_index("expiry date")
-        .join(spx_df["close"].rename("Sf"), how="inner", lsuffix="", rsuffix="_s")
+        .join(spx_data["close"].rename("Sf"), how="inner", lsuffix="", rsuffix="_s")
         .reset_index(drop=False)
     )  # Transform back to integer index for next step...
 
@@ -189,7 +191,10 @@ def apply_underlying_price_at_expiry(opt_df: pd.DataFrame) -> pd.DataFrame:
     opt_df.loc[standard_idx, "Sf"] = (
         opt_df.set_index("expiry date")
         .join(
-            spx_df.shift(-1)["open"].rename("Sf"), how="left", lsuffix="", rsuffix="_s"
+            spx_data.shift(-1)["open"].rename("Sf"),
+            how="left",
+            lsuffix="",
+            rsuffix="_s",
         )
         .reset_index(drop=False)
         .loc[standard_idx, "Sf"]
@@ -198,10 +203,12 @@ def apply_underlying_price_at_expiry(opt_df: pd.DataFrame) -> pd.DataFrame:
     return opt_df
 
 
-def apply_underlying_price_and_yield_at_entry(opt_df: pd.DataFrame) -> pd.DataFrame:
+def apply_underlying_price_and_yield_at_entry(
+    opt_df: pd.DataFrame, spx_data: pd.DataFrame
+) -> pd.DataFrame:
     """Applies the underlying price and dividend yield at 'trade date'.
     Note: For some reason, after reindexing on 'trade date' for the purposes of
-    joining with spx_df, calling reset_index() causes the column to be renamed
+    joining with spx_data, calling reset_index() causes the column to be renamed
     'index'. This does not happen with 'expiry date'. For this reason, we rename the
     'index' column back to 'trade date' after resetting the index.
 
@@ -213,13 +220,13 @@ def apply_underlying_price_and_yield_at_entry(opt_df: pd.DataFrame) -> pd.DataFr
     """
     print("Identifying SPX CLOSE at trade date...")
     opt_df = opt_df.set_index("trade date").join(
-        spx_df["close"].rename("S0"), how="left", lsuffix="", rsuffix="_s"
+        spx_data["close"].rename("S0"), how="left", lsuffix="", rsuffix="_s"
     )
     # Not sure why 'trade date' is special, but it requires renaming
-    # from 'index' after joining with spx_df.
+    # from 'index' after joining with spx_data.
     print("Aligning S&P 500 dividend yield...")
     opt_df = (
-        opt_df.join(spx_df["q"], how="left", lsuffix="", rsuffix="_s")
+        opt_df.join(spx_data["q"], how="left", lsuffix="", rsuffix="_s")
         .reset_index(drop=False)
         .rename(columns={"index": "trade date"})
     )
@@ -318,20 +325,23 @@ def compute_options_greeks(
     """
     in_suffix = ""
     out_suffix = "_"
+    msg_insert = ""
     if use_shimko:
         in_suffix = "_shimko"
         out_suffix = "_shimko"
+        msg_insert = " via Shimko's method"
 
-    print("Computing options Greeks...")
+    print(f"Computing options Greeks{msg_insert}...")
     for i in tqdm(range(opt_df.shape[0])):
         row = opt_df.iloc[i]
 
-        if row["call/put"] == "c":
+        opt_type = row["call/put"]
+        if opt_type == "c":
             greek = BSCall()
-        elif row["call/put"] == "p":
+        elif opt_type == "p":
             greek = BSPut()
         else:
-            raise ValueError("call/put should be either 'c' or 'p'")
+            raise ValueError(f"call/put should be either 'c' or 'p'; got {opt_type}")
 
         def f(sigma_: float) -> float:
             y_pred: float = greek.price(
@@ -421,7 +431,11 @@ def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.Data
     ).reset_index(drop=False)
     ladder["c-p"] = ladder["mid price" + call_suffix] - ladder["mid price" + put_suffix]
 
-    call_cols = [col + call_suffix for col in call_df.columns] + new_cols
+    call_cols = (
+        idx_labels
+        + [col + call_suffix for col in call_df.columns if col not in idx_labels]
+        + new_cols
+    )
     put_cols = (
         idx_labels
         + [col + put_suffix for col in call_df.columns if col not in idx_labels]
@@ -556,8 +570,10 @@ if __name__ == "__main__":
 
         opt_df = load_concatenate_options_files(opt_fn_list=opt_fn_list, cols=cols)
         opt_df = compute_contract_durations_and_types(opt_df=opt_df)
-        opt_df = apply_underlying_price_at_expiry(opt_df=opt_df)
-        opt_df = apply_underlying_price_and_yield_at_entry(opt_df=opt_df)
+        opt_df = apply_underlying_price_at_expiry(opt_df=opt_df, spx_data=spx_df)
+        opt_df = apply_underlying_price_and_yield_at_entry(
+            opt_df=opt_df, spx_data=spx_df
+        )
         opt_df = apply_risk_free_rate(opt_df=opt_df, rf_curve=rf_curve)
 
         call_df = process_call_options(opt_df=opt_df)
