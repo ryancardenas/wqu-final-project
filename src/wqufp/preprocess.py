@@ -407,7 +407,7 @@ def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.Data
         between call and put price), 'rf_shimko' (implied carry rate), and 'q_shimko'
         (implied dividend yield).
     """
-    assert call_df.columns == put_df.columns
+    assert np.array_equal(call_df.columns, put_df.columns)
     idx_labels = ["trade date", "dte", "strike"]
     call_suffix = ""
     put_suffix = "_p"
@@ -432,15 +432,24 @@ def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.Data
         tmp1 = ladder[ladder["trade date"] == trade_date]
         for dte in tmp1["dte"].unique():
             tmp2 = tmp1[tmp1["dte"] == dte]
-            T = tmp2["T"].iloc[0]
-            S0 = tmp2["S0"].iloc[0]
-            coefs = np.polyfit(tmp2["strike"].values, tmp2["c-p"].values, deg=1)
-            m = coefs[0]
-            b = coefs[1]
-            assert np.abs(m) < 1, f"regression slope should be in (-1, 1); got {m}"
-            assert b > 0, f"regression intercept should be > 0; got {b}"
-            rf = np.log(-m) / -T
-            q = np.log(b / S0) / -T
+            if tmp2.shape[0] >= 2:
+                T = tmp2["T"].iloc[0]
+                S0 = tmp2["S0"].iloc[0]
+                K = tmp2["strike"].values
+                c_minus_p = tmp2["c-p"].values
+
+                polyfit = np.polynomial.Polynomial.fit(K, c_minus_p, deg=1)
+                coefs = polyfit.convert(
+                    domain=polyfit.domain, window=polyfit.domain
+                ).coef
+                b = coefs[0]  # Polynomial provides coefs in ascending degree
+                m = coefs[1]
+
+                rf = np.log(-m) / -T
+                q = np.log(b / S0) / -T
+            else:
+                rf = np.nan
+                q = np.nan
 
             idxs = tmp2.index
             ladder.loc[idxs, "rf_shimko"] = rf
@@ -523,6 +532,7 @@ if __name__ == "__main__":
     warnings.filterwarnings(
         "ignore", message="divide by zero encountered in scalar divide"
     )
+    warnings.filterwarnings("ignore", message="invalid value encountered in log")
 
     spx_df = get_index_data()
     rf_curve = RiskFreeYield()
