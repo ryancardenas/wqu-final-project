@@ -16,6 +16,7 @@ import time
 import warnings
 from pathlib import Path
 
+# import h5py
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
@@ -303,14 +304,24 @@ def compute_options_greeks(
     max_vol: float = 2.5,
     xtol: float = 1e-6,
     max_iter: int = 100,
+    use_shimko: bool = False,
 ) -> pd.DataFrame:
-    """Computes sigma (implied volatility), delta, theta, gamma, rho, and vega
+    """Computes sigma (implied volatility), delta, theta, gamma, rho, and vega. Has
+    'use_shimko' flag to compute using Shimko's (1993) method. If Shimko's method is
+    not used, will default to using Shiller's dividend yields and FRED's treasury
+    rates via wqufp.yield_curve.RiskFreeYield.
 
     Returns
     -------
     opt_df: pd.DataFrame
         Options data with Greeks included.
     """
+    in_suffix = ""
+    out_suffix = "_"
+    if use_shimko:
+        in_suffix = "_shimko"
+        out_suffix = "_shimko"
+
     print("Computing options Greeks...")
     for i in tqdm(range(opt_df.shape[0])):
         row = opt_df.iloc[i]
@@ -327,9 +338,9 @@ def compute_options_greeks(
                 S0=row["S0"],
                 K=row["strike"],
                 T=row["T"],
-                r=row["rf"],
+                r=row["rf" + in_suffix],
                 sigma=sigma_,
-                q=row["q"],
+                q=row["q" + in_suffix],
             )
             y_true: float = row["mid price"]
             return y_pred - y_true
@@ -356,20 +367,99 @@ def compute_options_greeks(
             S0=row["S0"],
             K=row["strike"],
             T=row["T"],
-            r=row["rf"],
+            r=row["rf" + in_suffix],
             sigma=sigma,
-            q=row["q"],
+            q=row["q" + in_suffix],
         )
 
-        opt_df.loc[i, "sigma_"] = sigma
-        opt_df.loc[i, "delta_"] = delta
-        opt_df.loc[i, "theta_"] = theta
-        opt_df.loc[i, "rho_"] = rho
-        opt_df.loc[i, "gamma_"] = gamma
-        opt_df.loc[i, "vega_"] = vega
-        opt_df.loc[i, "pitm_"] = p_itm
+        opt_df.loc[i, "sigma" + out_suffix] = sigma
+        opt_df.loc[i, "delta" + out_suffix] = delta
+        opt_df.loc[i, "theta" + out_suffix] = theta
+        opt_df.loc[i, "rho" + out_suffix] = rho
+        opt_df.loc[i, "gamma" + out_suffix] = gamma
+        opt_df.loc[i, "vega" + out_suffix] = vega
+        opt_df.loc[i, "pitm" + out_suffix] = p_itm
 
     return opt_df
+
+
+def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.DataFrame:
+    """Computes options-implied carry rate and dividend yield via Shimko's (1993)
+    method, which involves using put-call parity and linear regression to infer the
+    carry rates and dividend yields from the following equation:
+        C - P = -BK + SD
+    where
+        C  = call price
+        P = put price
+        K = strike price
+        B = e^(-rT)
+        S = underlying price
+        D = e^(-qT)
+
+    A line is regressed on y(K) = C - P, producing constants (-B, SD) which can then
+    be used to compute r and q, respectively.
+
+    Returns
+    -------
+    opt_df: pd.DataFrame
+        Options data containing only those strikes for which both valid call data and
+        valid put data are available. Includes three new columns: 'c-p' (difference
+        between call and put price), 'rf_shimko' (implied carry rate), and 'q_shimko'
+        (implied dividend yield).
+    """
+    assert call_df.columns == put_df.columns
+    idx_labels = ["trade date", "dte", "strike"]
+    call_suffix = ""
+    put_suffix = "_p"
+    new_cols = ["c-p", "rf_shimko", "q_shimko"]
+
+    calls = call_df.set_index(idx_labels)
+    puts = put_df.set_index(idx_labels)
+
+    ladder = calls.join(
+        puts, how="inner", lsuffix=call_suffix, rsuffix=put_suffix
+    ).reset_index(drop=False)
+    ladder["c-p"] = ladder["mid price" + call_suffix] - ladder["mid price" + put_suffix]
+
+    call_cols = [col + call_suffix for col in call_df.columns] + new_cols
+    put_cols = (
+        idx_labels
+        + [col + put_suffix for col in call_df.columns if col not in idx_labels]
+        + new_cols
+    )
+
+    for trade_date in tqdm(ladder["trade date"].unique(), desc="iterating trade dates"):
+        tmp1 = ladder[ladder["trade date"] == trade_date]
+        for dte in tmp1["dte"].unique():
+            tmp2 = tmp1[tmp1["dte"] == dte]
+            T = tmp2["T"].iloc[0]
+            S0 = tmp2["S0"].iloc[0]
+            coefs = np.polyfit(tmp2["strike"].values, tmp2["c-p"].values, deg=1)
+            m = coefs[0]
+            b = coefs[1]
+            assert np.abs(m) < 1, f"regression slope should be in (-1, 1); got {m}"
+            assert b > 0, f"regression intercept should be > 0; got {b}"
+            rf = np.log(-m) / -T
+            q = np.log(b / S0) / -T
+
+            idxs = tmp2.index
+            ladder.loc[idxs, "rf_shimko"] = rf
+            ladder.loc[idxs, "q_shimko"] = q
+
+    calls = ladder[call_cols]
+    puts = ladder[put_cols]
+    puts.columns = calls.columns
+
+    result = pd.concat([calls, puts], ignore_index=True)
+
+    return result
+
+
+# def save_to_hdf5(df: pd.DataFrame, trg_path: Path | str, start_idx: int = 0) -> None:
+#     """Append df to HDF5 file, converting datetime columns to integers (seconds since
+#     epoch).
+#     """
+#     with h5py.File()
 
 
 def rebuild_hdf5(fn_stem: str = "options_rebuilt", complevel: int = 9) -> None:
@@ -424,6 +514,7 @@ if __name__ == "__main__":
     all_opt_fn_list = sorted(glob.glob(options_dir + "/SPX/*"))
     data_years = pd.Series([c.split("_")[1] for c in all_opt_fn_list]).unique()
 
+    rows_saved = 0
     for data_year in data_years:
         print(f"Processing Year: {data_year}")
         opt_fn_list = sorted(glob.glob(options_dir + f"/SPX/*_{data_year}_*"))
@@ -437,8 +528,14 @@ if __name__ == "__main__":
         call_df = process_call_options(opt_df=opt_df)
         put_df = process_put_options(opt_df=opt_df)
 
-        opt_df = pd.concat([call_df, put_df], ignore_index=True)
-        opt_df = compute_options_greeks(opt_df=opt_df)
+        # Apply Shimko's method for calculating rf and q
+        opt_df = apply_shimkos_method(call_df=call_df, put_df=put_df)
+
+        # Compute Greeks using Shiller/FRED assumptions
+        opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=False)
+
+        # Compute Greeks using Shimko assumptions
+        opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=True)
 
         print("Saving to disk...")
         trg_path_csv = TRG_OPT_DF_DIR / (data_year + ".csv")
@@ -452,6 +549,7 @@ if __name__ == "__main__":
             format="table",
             append=True,
         )
+        rows_saved = opt_df.shape[0]
 
         stop = time.perf_counter()
         print(f"Processing time elapsed: {(stop - start) / 60:.2f} minutes")
