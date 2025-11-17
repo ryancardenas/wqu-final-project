@@ -219,11 +219,11 @@ def apply_underlying_price_at_expiry(
         .join(
             spx_data["open"].rename("Sf"),
             how="left",
-            lsuffix="",
-            rsuffix="_s",
+            lsuffix="_original",
+            rsuffix="_new",
         )
         .reset_index(drop=False)
-        .loc[standard_idx, "Sf"]
+        .loc[standard_idx, "Sf_new"]
     )
 
     return opt_df
