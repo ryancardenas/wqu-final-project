@@ -66,8 +66,9 @@ def get_index_data() -> pd.DataFrame:
     Returns
     -------
     spx_df: pd.DataFrame
-        Dataframe containing DATETIME, OPEN, CLOSE, and Q (annualized dividend yield)
-        for SPX.
+        Dataframe containing DATETIME, OPEN, CLOSE, Q (annualized dividend yield), LR
+        (log-return), LR_MEAN_HISTORICAL (mean historical log-return on rolling basis),
+        and LR_DETRENDED (LR - LR_MEAN_HISTORICAL) for SPX.
     """
     # Import SPX historical prices
     yf_spx_fn = Path("./src/data/yf_spx.csv")
@@ -78,6 +79,17 @@ def get_index_data() -> pd.DataFrame:
     shiller = get_shiller_dividend_yield()
     spx_df = spx_df.join(shiller, how="left")
     spx_df.loc[:, "q"] = spx_df["q"].ffill()
+
+    # Compute log-return and detrended log-return
+    spx_df["lr"] = np.log(spx_df["close"] / spx_df["close"].shift())
+    spx_df["lr_mean_historical"] = spx_df["lr"].expanding().mean()
+    spx_df["lr_detrended"] = spx_df["lr"] - spx_df["lr_mean_historical"]
+
+    # Verify log-return calculation
+    a = spx_df["close"].iloc[0] * np.exp(spx_df["lr"].cumsum()).values[1:]
+    b = spx_df["close"].values[1:]
+    assert np.allclose(a, b)
+
     spx_df.dropna(inplace=True)
     return spx_df
 
