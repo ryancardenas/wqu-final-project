@@ -65,7 +65,7 @@ def get_index_data() -> pd.DataFrame:
 
     Returns
     -------
-    spx_df: pd.DataFrame
+    spx: pd.DataFrame
         Dataframe containing DATETIME, OPEN, CLOSE, Q (annualized dividend yield), LR
         (log-return), LR_MEAN_HISTORICAL (mean historical log-return on rolling
         basis), LR_DETRENDED (LR - LR_MEAN_HISTORICAL), and the overnight
@@ -73,31 +73,31 @@ def get_index_data() -> pd.DataFrame:
     """
     # Import SPX historical prices
     yf_spx_fn = Path("./src/data/yf_spx.csv")
-    spx_df = pd.read_csv(yf_spx_fn).set_index("datetime")[["open", "close"]]
-    spx_df.index = pd.to_datetime(spx_df.index)
+    spx = pd.read_csv(yf_spx_fn).set_index("datetime")[["open", "close"]]
+    spx.index = pd.to_datetime(spx.index)
 
     # Join with Shiller's dividend yield
     shiller = get_shiller_dividend_yield()
-    spx_df = spx_df.join(shiller, how="left")
-    spx_df.loc[:, "q"] = spx_df["q"].ffill()
+    spx = spx.join(shiller, how="left")
+    spx.loc[:, "q"] = spx["q"].ffill()
 
     # Compute log-return and detrended log-return
-    spx_df["lr"] = np.log(spx_df["close"] / spx_df["close"].shift())
-    spx_df["lr_mean_historical"] = spx_df["lr"].expanding().mean()
-    spx_df["lr_detrended"] = spx_df["lr"] - spx_df["lr_mean_historical"]
+    spx["lr"] = np.log(spx["close"] / spx["close"].shift())
+    spx["lr_mean_historical"] = spx["lr"].expanding().mean()
+    spx["lr_detrended"] = spx["lr"] - spx["lr_mean_historical"]
 
     # Compute overnight log-return and detrended log-return
-    spx_df["onlr"] = np.log(spx_df["open"] / spx_df["close"].shift())
-    spx_df["onlr_mean_historical"] = spx_df["onlr"].expanding().mean()
-    spx_df["onlr_detrended"] = spx_df["onlr"] - spx_df["onlr_mean_historical"]
+    spx["onlr"] = np.log(spx["open"] / spx["close"].shift())
+    spx["onlr_mean_historical"] = spx["onlr"].expanding().mean()
+    spx["onlr_detrended"] = spx["onlr"] - spx["onlr_mean_historical"]
 
     # Verify log-return calculation
-    a = spx_df["close"].iloc[0] * np.exp(spx_df["lr"].cumsum()).values[1:]
-    b = spx_df["close"].values[1:]
+    a = spx["close"].iloc[0] * np.exp(spx["lr"].cumsum()).values[1:]
+    b = spx["close"].values[1:]
     assert np.allclose(a, b)
 
-    spx_df.dropna(inplace=True)
-    return spx_df
+    spx.dropna(inplace=True)
+    return spx
 
 
 def load_concatenate_options_files(
