@@ -67,8 +67,9 @@ def get_index_data() -> pd.DataFrame:
     -------
     spx_df: pd.DataFrame
         Dataframe containing DATETIME, OPEN, CLOSE, Q (annualized dividend yield), LR
-        (log-return), LR_MEAN_HISTORICAL (mean historical log-return on rolling basis),
-        and LR_DETRENDED (LR - LR_MEAN_HISTORICAL) for SPX.
+        (log-return), LR_MEAN_HISTORICAL (mean historical log-return on rolling
+        basis), LR_DETRENDED (LR - LR_MEAN_HISTORICAL), and the overnight
+        LR-equivalents for SPX.
     """
     # Import SPX historical prices
     yf_spx_fn = Path("./src/data/yf_spx.csv")
@@ -84,6 +85,11 @@ def get_index_data() -> pd.DataFrame:
     spx_df["lr"] = np.log(spx_df["close"] / spx_df["close"].shift())
     spx_df["lr_mean_historical"] = spx_df["lr"].expanding().mean()
     spx_df["lr_detrended"] = spx_df["lr"] - spx_df["lr_mean_historical"]
+
+    # Compute overnight log-return and detrended log-return
+    spx_df["onlr"] = np.log(spx_df["open"] / spx_df["close"].shift())
+    spx_df["onlr_mean_historical"] = spx_df["onlr"].expanding().mean()
+    spx_df["onlr_detrended"] = spx_df["onlr"] - spx_df["onlr_mean_historical"]
 
     # Verify log-return calculation
     a = spx_df["close"].iloc[0] * np.exp(spx_df["lr"].cumsum()).values[1:]
@@ -180,7 +186,7 @@ def apply_underlying_price_at_expiry(
     opt_df: pd.DataFrame, spx_data: pd.DataFrame
 ) -> pd.DataFrame:
     """Computes the underlying settlement price at expiry. Handles standard/non-standard
-    expiry settlements.
+    expiry AM/PM settlements.
 
     Returns
     -------
@@ -195,12 +201,12 @@ def apply_underlying_price_at_expiry(
     )  # Transform back to integer index for next step...
 
     # Need to operate on integer index; datetime index takes too long to slice
-    print("Applying next-day SPX OPEN for standard (monthly) options...")
+    print("Applying SPX OPEN for standard (monthly, AM-settlement) options...")
     standard_idx = opt_df[opt_df["standard"]].index
     opt_df.loc[standard_idx, "Sf"] = (
         opt_df.set_index("expiry date")
         .join(
-            spx_data.shift(-1)["open"].rename("Sf"),
+            spx_data["open"].rename("Sf"),
             how="left",
             lsuffix="",
             rsuffix="_s",
@@ -210,6 +216,21 @@ def apply_underlying_price_at_expiry(
     )
 
     return opt_df
+
+
+#
+#
+# def compute_detrended_sf(
+#     market_df: pd.DataFrame,
+#     trade_date: str,
+#     expiry_date: str,
+#     am_settlement: bool
+# ) -> float:
+#     x = market_df.loc[trade_date:expiry_date]
+#     lr_detrended = x['lr_detrended'].cumsum().values
+#     # First cumsum is from earlier period; subtract from all periods.
+#     lr_detrended = lr_detrended - lr_detrended[0]
+#     return x['close'].iloc[0] * np.exp(lr_detrended[-1])
 
 
 def apply_underlying_price_and_yield_at_entry(
