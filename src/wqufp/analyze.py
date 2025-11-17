@@ -324,3 +324,102 @@ def generate_qp_graphs(
 
     print(f"{method} graphs saved to disk.")
     return x, calls, puts
+
+
+def generate_method_comparison_graphs(
+    x: pd.DataFrame,
+    calls: pd.DataFrame,
+    puts: pd.DataFrame,
+    x_shimko: pd.DataFrame,
+    calls_shimko: pd.DataFrame,
+    puts_shimko: pd.DataFrame,
+) -> None:
+    """Generates graphs of Q_Shimko minus Q_FRED_Shiller and saves to disk.
+
+    Parameters
+    -------
+    x: pd.DataFrame
+        FRED/Shiller all contracts dataframe from get_measures().
+
+    calls: pd.DataFrame
+        FRED/Shiller calls-only dataframe from get_measures().
+
+    puts: pd.DataFrame
+        FRED/Shiller puts-only dataframe from get_measures().
+
+    x_shimko: pd.DataFrame
+        Shimko all contracts dataframe from get_measures().
+
+    calls_shimko: pd.DataFrame
+        Shimko calls-only dataframe from get_measures().
+
+    puts_shimko: pd.DataFrame
+        Shimko puts-only dataframe from get_measures().
+    """
+    x_label = "Q(ITM)"
+    y_label = "Q"
+    y_axis_label = r"$Q_{\text{Shimko}}-Q{\text{FRED_Shiller}}"
+    fn = IMG_PATH / "shimko_minus_fred_shiller_q.png"
+
+    y_lim = (-0.04, 0.02)
+    fig, axs = plt.subplots(3, 1, figsize=(12, 12))
+    fig.suptitle("Comparing Shimko Q Minus FRED/Shiller Q")
+
+    ax = axs[0]
+    y = x_shimko[y_label] - x[y_label]
+    ax.set_title("All Contracts")
+    ax.plot(x[x_label], y, label=f"{y_label}: Shimko - FRED/Shiller")
+    ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    ax.set_ylabel(y_axis_label)
+    ax.axhline(color="grey")
+    ax.axvline(0.5, color="grey")
+    ax.fill_between(
+        x[x_label],
+        y,
+        0,
+        where=(y >= 0),
+        color="green",
+        alpha=0.3,
+        label="Shimko overestimates FRED/Shiller",
+    )
+    ax.fill_between(
+        x[x_label],
+        y,
+        0,
+        where=(y < 0),
+        color="red",
+        alpha=0.3,
+        label="Shimko underestimates FRED/Shiller",
+    )
+    ax.set_ylim(y_lim)
+    ax.grid()
+    ax.legend()
+
+    ax = axs[1]
+    y = calls_shimko[y_label] - calls[y_label]
+    ax.set_title("Calls Only")
+    ax.plot(x[x_label], y)
+    ax.tick_params(axis="x", which="both", bottom=False, labelbottom=False)
+    ax.set_ylabel(y_axis_label)
+    ax.axhline(color="grey")
+    ax.axvline(0.5, color="grey")
+    ax.grid()
+    ax.fill_between(x[x_label], y, 0, where=(y >= 0), color="green", alpha=0.3)
+    ax.fill_between(x[x_label], y, 0, where=(y < 0), color="red", alpha=0.3)
+    ax.set_ylim(y_lim)
+
+    ax = axs[2]
+    y = puts_shimko[y_label] - puts[y_label]
+    ax.set_title("Puts Only")
+    ax.plot(x[x_label], y)
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_axis_label)
+    ax.axhline(color="grey")
+    ax.axvline(0.5, color="grey")
+    ax.grid()
+    ax.fill_between(x[x_label], y, 0, where=(y >= 0), color="green", alpha=0.3)
+    ax.fill_between(x[x_label], y, 0, where=(y < 0), color="red", alpha=0.3)
+    ax.set_ylim(y_lim)
+
+    fig.tight_layout()
+    plt.savefig(fn)
