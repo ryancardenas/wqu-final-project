@@ -261,7 +261,7 @@ def compute_detrended_sf(
 
     # Accumulate de-trended log-returns and apply final value
     lr_final = lr_detrended.sum()
-    sf_detrended: float = x.loc["trade_date", "close"] * np.exp(lr_final)
+    sf_detrended: float = x.loc[trade_date, "close"] * np.exp(lr_final)
     return sf_detrended
 
 
