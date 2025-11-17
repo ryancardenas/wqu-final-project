@@ -63,6 +63,17 @@ def get_index_data() -> pd.DataFrame:
     dividend yield (forward filled from quarterly samples, which is representative of
     information available during live trading).
 
+    Also computes SPX historical daily log-returns and detrended log-returns.
+    Detrending logic follows these steps:
+    (1) Convert Sf series to log-returns (lr).
+    (2) Compute historical mean log-return (lr_mean_historical) on expanding basis
+        (window with anchored left boundary and rolling right boundary) that accounts
+        for all available historical data.
+    (3) Subtract the historical mean log-return from the daily log-return, producing
+        the detrended log-return (lr_detrended).
+    (4) Repeat for overnight log-returns (onlr) from CLOSE(T-1) to OPEN(T), as these
+        are useful for reconstructing AM settlement prices.
+
     Returns
     -------
     spx: pd.DataFrame
@@ -218,19 +229,40 @@ def apply_underlying_price_at_expiry(
     return opt_df
 
 
-#
-#
-# def compute_detrended_sf(
-#     market_df: pd.DataFrame,
-#     trade_date: str,
-#     expiry_date: str,
-#     am_settlement: bool
-# ) -> float:
-#     x = market_df.loc[trade_date:expiry_date]
-#     lr_detrended = x['lr_detrended'].cumsum().values
-#     # First cumsum is from earlier period; subtract from all periods.
-#     lr_detrended = lr_detrended - lr_detrended[0]
-#     return x['close'].iloc[0] * np.exp(lr_detrended[-1])
+def compute_detrended_sf(
+    market_df: pd.DataFrame, trade_date: str, expiry_date: str, am_settlement: bool
+) -> float:
+    """Computes the final price (Sf) of the undelrying after detrending it.
+    Detrending involves the following steps:
+
+    PRECOMPUTED IN MARKET_DF
+    (1) Convert Sf series to log-returns (lr).
+    (2) Compute historical mean log-return (lr_mean_historical) on expanding basis
+        (window with anchored left boundary and rolling right boundary) that accounts
+        for all available historical data.
+    (3) Subtract the historical mean log-return from the daily log-return, producing
+        the detrended log-return (lr_detrended).
+
+    Returns
+    -------
+    sf_detrended: float
+        The reconstructed settlement price of the underlying, with the historical
+        log-return trend removed.
+    """
+    x = market_df.loc[trade_date:expiry_date]  # type: ignore[misc]
+    lr_detrended = x["lr_detrended"].values
+
+    # First LR is from earlier period -> set to zero.
+    lr_detrended[0] = 0
+
+    # Handle last log-return from CLOSE(T-1) to OPEN(T)
+    if am_settlement:
+        lr_detrended[-1] = x["onlr_detrended"].values[-1]
+
+    # Accumulate de-trended log-returns and apply final value
+    lr_final = lr_detrended.sum()
+    sf_detrended: float = x.loc["trade_date", "close"] * np.exp(lr_final)
+    return sf_detrended
 
 
 def apply_underlying_price_and_yield_at_entry(
