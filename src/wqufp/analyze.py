@@ -29,6 +29,7 @@ def generate_treasury_yield_curve_graphs(date: str = "2025-11-01") -> None:
     data points displayed on top of cubic spline fit. Saves two graphs to disk -- one
     for the 30-year view and one for the 1-year view.
     """
+    print("Generating graphs of treasury yield curves...")
     rf = RiskFreeYield()
 
     # First the 0-30 year chart
@@ -152,6 +153,7 @@ def load_preprocessed_data() -> pd.DataFrame:
         Dataframe containing preprocessed options data. Includes a just-in-time
         calculation of ITM_detrended.
     """
+    print("Loading options.hdf5 into memory...")
     date_labels = ["trade date", "expiry date"]
     val_labels = [
         "call/put",
@@ -192,7 +194,7 @@ def load_preprocessed_data() -> pd.DataFrame:
     )
 
     df.dropna(inplace=True)
-    print(f"{df.memory_usage().sum() / 1e9:.2f} GB loaded into memory")
+    print(f"{df.memory_usage().sum() / 1e9:.2f} GB loaded into memory.")
     return df
 
 
@@ -236,6 +238,8 @@ def generate_qp_graphs(
     detrend_label = ""
     if detrended:
         detrend_label = "Detrended"
+
+    print(f"Generating {detrend_label.lower()} graphs...")
 
     x_label = "Q"
     y_label = "Q-P"
@@ -322,7 +326,7 @@ def generate_qp_graphs(
     ax.legend()
     plt.savefig(fn2)
 
-    print(f"{method} graphs saved to disk.")
+    print(f"{method} {detrend_label.lower()} graphs saved to disk.")
     return x, calls, puts
 
 
@@ -333,6 +337,7 @@ def generate_method_comparison_graphs(
     x_shimko: pd.DataFrame,
     calls_shimko: pd.DataFrame,
     puts_shimko: pd.DataFrame,
+    detrended: bool = False,
 ) -> None:
     """Generates graphs of Q_Shimko minus Q_FRED_Shiller and saves to disk.
 
@@ -356,14 +361,24 @@ def generate_method_comparison_graphs(
     puts_shimko: pd.DataFrame
         Shimko puts-only dataframe from get_measures().
     """
-    x_label = "Q(ITM)"
+    x_label = "Q"
     y_label = "Q"
+    x_axis_label = "Q(ITM)"
     y_axis_label = r"$Q_{\text{Shimko}}-Q{\text{FRED_Shiller}}"
-    fn = IMG_PATH / "shimko_minus_fred_shiller_q.png"
+
+    detrend_label = ""
+    detrend_suffix = ""
+    if detrended:
+        detrend_label = " for Detrended Underlying"
+        detrend_suffix = "detrended"
+
+    print(f"Generating {detrend_suffix} comparison graphs...")
+
+    fn = IMG_PATH / f"shimko_minus_fred_shiller_q_{detrend_suffix}.png"
 
     y_lim = (-0.04, 0.02)
     fig, axs = plt.subplots(3, 1, figsize=(12, 12))
-    fig.suptitle("Comparing Shimko Q Minus FRED/Shiller Q")
+    fig.suptitle(f"Comparing Shimko Q Minus FRED/Shiller Q{detrend_label}")
 
     ax = axs[0]
     y = x_shimko[y_label] - x[y_label]
@@ -412,7 +427,7 @@ def generate_method_comparison_graphs(
     y = puts_shimko[y_label] - puts[y_label]
     ax.set_title("Puts Only")
     ax.plot(x[x_label], y)
-    ax.set_xlabel(x_label)
+    ax.set_xlabel(x_axis_label)
     ax.set_ylabel(y_axis_label)
     ax.axhline(color="grey")
     ax.axvline(0.5, color="grey")
@@ -423,3 +438,47 @@ def generate_method_comparison_graphs(
 
     fig.tight_layout()
     plt.savefig(fn)
+    print("Comparison graphs saved to disk.")
+
+
+if __name__ == "__main__":
+    prec = 2
+
+    generate_treasury_yield_curve_graphs(date="2025-11-01")
+    opt_df = load_preprocessed_data()
+
+    # True Sf and ITM
+    detrended = False
+    (x, calls, puts) = generate_qp_graphs(
+        df=opt_df, q_measure="pitm_", prec=prec, detrended=detrended
+    )
+    (x_shimko, calls_shimko, puts_shimko) = generate_qp_graphs(
+        df=opt_df, q_measure="pitm_shimko", prec=prec, detrended=detrended
+    )
+    generate_method_comparison_graphs(
+        x=x,
+        calls=calls,
+        puts=puts,
+        x_shimko=x_shimko,
+        calls_shimko=calls_shimko,
+        puts_shimko=puts_shimko,
+        detrended=detrended,
+    )
+
+    # Detrended Sf and ITM
+    detrended = True
+    (x, calls, puts) = generate_qp_graphs(
+        df=opt_df, q_measure="pitm_", prec=prec, detrended=detrended
+    )
+    (x_shimko, calls_shimko, puts_shimko) = generate_qp_graphs(
+        df=opt_df, q_measure="pitm_shimko", prec=prec, detrended=detrended
+    )
+    generate_method_comparison_graphs(
+        x=x,
+        calls=calls,
+        puts=puts,
+        x_shimko=x_shimko,
+        calls_shimko=calls_shimko,
+        puts_shimko=puts_shimko,
+        detrended=detrended,
+    )
