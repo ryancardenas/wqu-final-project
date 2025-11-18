@@ -1,0 +1,169 @@
+%% 
+%% Copyright 2025 Ryan Cardenas
+%% 
+%% This file contains the source code for my thesis project as part of the WQU 
+%% Capstone 690 course at WorldQuant University. It is based on the Elsevier
+%% template, which can be found at: 
+%% https://www.elsevier.com/researcher/author/policies-and-guidelines/latex-instructions
+%% 
+%% This document is not intended for distribution outside of the WorldQuant University
+%% Capstone 690 course without permission from the author.
+%%
+
+
+\documentclass[final,3p,times,authoryear]{elsarticle}
+
+%% The amssymb package provides various useful mathematical symbols
+\usepackage{amssymb}
+%% The amsmath package provides various useful equation environments.
+\usepackage{amsmath}
+%% For importing images
+\usepackage{graphicx}
+\graphicspath{ {./images/} }
+
+\journal{WorldQuant University Capstone Course 690}
+
+\begin{document}
+
+
+\begin{frontmatter}
+
+    \title{Exploration of Risk Neutral Density and Pricing Kernels in Equity Markets\tnoteref{t1}}
+    \tnotetext[t1]{November 18, 2025 - This document is submitted to the WorldQuant University Capstone 690 course as a requirement for the M.Sc. in Financial Engineering.} 
+
+    \author{Ryan Cardenas}
+    \ead{cardenasr913@gmail.com}
+    \affiliation{organization={WorldQuant University}}
+
+  
+    \begin{abstract}
+    %% ToDo: Write abstract.
+    \end{abstract}
+
+    %% Keywords
+    \begin{keyword} %% keywords here, in the form: keyword \sep keyword
+      risk-neutral probability \sep European options \sep treasury yield term structure
+    \end{keyword}
+    
+\end{frontmatter}
+
+
+%% Use \section commands to start a section
+\section{Background}
+  \label{background}
+  Risk-neutral densities (RNDs) have fascinated researchers in financial engineering ever since \citet{black_pricing_1973} first published their risk-neutral method for pricing European options. In the years that followed, \citet{ross_arbitrage_1976} introduced the concepts of state-prices and stochastic discount factors (SDF, also called "pricing kernels"), which represent the risk-neutral value of future payoff states and the weight investors apply to those states, respectively. \citet{breeden_prices_1978} then presented a method for extracting risk-neutral densities using call option prices across different strikes, enabling a generation of researchers to explore empirical methods for deriving insights from options prices.
+
+  One such insight is depicted in \citet{figlewski_risk-neutral_2018}: when compared against a lognormal distribution with volatility derived from a weighted combination of historical volatility and the VIX, the options-implied RND displays a noticeable negative skew and body that is shifted to the right. The ratio of the two distributions discounted by the risk-free rate produces a pricing kernel that places heavy weight on lower states with a temporary "hill" at intermediate higher states before continuing to slope downward. This common and well-documented behavior contrasts starkly with the downward-sloping monotonicity predicted by utility theory, producing a conundrum that \citet{jackwerth_option-implied_2004} calls the "pricing kernel puzzle".
+
+  At the same time, another commonly observed phenomenon known as the "volatility smile" reveals that options with different strikes generate different implied volatilities, suggesting that the market incorporates additional risk-premia for strikes far from the underlying. Are these strike-dependent premia due to market participants anticipating higher real-world probabilities for these future states, or are they the result of asymetrical, wealth-dependent aversion to large losses and preference toward modest gains? \citet{jackwerth_option-implied_2004}, \citet{figlewski_risk-neutral_2018}, \citet{shiratsuka_information_2001}, and \citet{anagnou_relation_2002} all indicate that RNDs are poor predictors of real-world probabilities while acknowledging the difficulties in ruling them out as predictors. 
+
+
+\section{Objectives}
+  \label{objectives}
+  I initially planned to develop an RND-based model for estimating future price distributions, but upon discovering multiple authors who have indicated this cannot be done, I have broadened the scope of my investigation to address a handful of questions that arose in the course of my background reading. These questions are:
+  \begin{enumerate}
+    \item To what extent do the "market-wide" state-prices (modeled as market-dependent stock states via CAPM) and their corresponding risk-neutral probabilities match the risk-neutral probabilities implied by options prices on indices and individual stocks?
+    \item To what extent do RNDs for different maturities exhibit a term structure that can be used to model path-dependent options?
+    \item Can real-world probabilities be derived from risk-neutral densities, and how do either set of probabilities compare to empirical distributions of asset returns?
+    \item How does variance risk premium vary with risk-free rate?
+    \item How does IV (as a function of moneyness) vary with risk-free rate?
+    \item How do IV curves and their associated RNDs change over time?
+    \item How do pricing kernels vary with recent volatility?
+    \item Can a ML model be trained to extract the pricing kernel?
+    \item To what extent do early-exercise premiums in American puts (for non-dividend-paying stocks) match or predict Q-measure and P-measure probabilities?
+    \item To what extent do differences in call/put implied volatilities effect pricing kernels, Q-measure probabilities, and P-measure probabilities?
+    \item To what extent are delta-implied probabilities consistent with P- or Q- measure probabilities, and how does this relationship vary with risk-neutral probability?
+  \end{enumerate}
+  That multiple authors have argued against using RNDs for prediction does not necessarily mean it is impossible, but their arguments for why it \textit{might} not be possible are compelling enough to merit further analysis. In the event my analysis of recent market data confirms their claims, this result alone may be worthy of publication. At the very least, the questions above should provided sufficient opportunity for exploration.
+
+
+\section{Theory}
+  \label{theory}
+    pass
+
+\section{Methodology}
+  \label{methodology}
+  
+  \subsection{General Index and Options Data}
+    We downloaded historical, raw (non-adjusted) OHLC data recorded at daily intervals for the S\&P 500 index (SPX) from Yahoo Finance. In computing option contract payoffs at expiry, we used SPX prices at market open for standard options, which are AM-settled on the third Friday of each month. For all non-standard "weekly" options, which are PM-settled, we used SPX prices at market close.
+
+    We obtained 15 years of end-of-day SPX options data (2010 through 2024) from \citet{firstrate_data_historical_nodate}, totaling over 30 million rows. This data includes trade date, expiry date, strike, bid price, and ask price. Although FirstRate Data also provides options Greeks, the underlying model assumptions are not available, so we recomputed the relevant values ourselves using the Black-Scholes-Merton equations shown below:
+
+    \begin{align}
+        &d_1 = \frac{
+          \ln{\left(\frac{S}{K}\right)} + (r - q + 0.5 \sigma^2) T
+        }{
+          \sigma \sqrt{T}
+        } \\
+        &d_2 = d_1 - \sigma \sqrt{T}
+    \end{align}
+
+    For Calls:
+    \begin{align}
+      &C = S {\rm e}^{-q T} F(d_1) - K {\rm e}^{-r T} F(d_2) \\
+      &\Delta_C = {\rm e}^{-q T} F(d_1) \\
+      &Q_C(\text{ITM}) = F(d_2) \label{eq:q_measure_c}
+    \end{align}
+
+    For Puts:
+    \begin{align}
+      &P = K {\rm e}^{-r T} F(-d_2) - S {\rm e}^{-q T} F(d_1) \\
+      &\Delta_P = -{\rm e}^{-q T} F(-d_1) \\
+      &Q_P(\text{ITM}) = F(-d_2) \label{eq:q_measure_p}
+    \end{align}
+
+    Where $F(\cdot)$ is the normal cumulative distribution function, $S$ is the underlying price at entry, $K$ is the strike price, $r$ is the annualized risk-free rate, $q$ is the annualized continuous dividend yield, $T$ is the years to maturity (e.g. $T=\frac{1}{12}$ for a one-month maturity), and $\sigma$ is the volatility of the underlying geometric Brownian motion process that generates $S$. The symbol $\Delta$ represents the options delta--the rate of change of options price with respect to underlying price. $Q(ITM)$ (or simply $Q$) represents the risk-neutral probability of expiring in-the-money and is different from the real-life probability $P$, which is easy to compute only in hindsight.
+
+    Our approach to computing Q-probabilities relied on extracting implied volatilities from options prices. Doing so, however, required two economic inputs: the risk-free rate and the dividend yield. To derive these inputs, we explored two methods.
+
+  \subsection{FRED/Shiller Method}
+    The Federal Reserve Bank of St. Louis \citep{fred_federal_2025} provides daily treasury yield data, which we downloaded via the FRED API in Python. Specifically, we obtained market yields on U.S. treasury securities quoted on an investment basis for 1-month, 3-month, 6-month, 1-year, 2-year, 3-year, 5-year, 7-year, 10-year, 20-year, and 30-year maturities. To represent overnight yields, we concatenated the Effective Federal Funds Rate (EFFR) with the Secured Overnight Financing Rate (SOFR). SOFR data is only available from 2018 onward; for all earlier dates, we used EFFR as the overnight rate. We then applied a cublic spline interpolation to the treasury yields as a function of years-to-maturity, producing a term structure useful for modeling risk-free rates for options contracts with various expirations.
+
+    To model dividend yields, we accessed S\&P 500 quarterly dividend data curated by Yale Professor Robert J. Shiller \citep{shiller_shiller_2025}. These dividend yields average over a trailing 12-month period. Shiller retroactively interpolates this data to monthly intervals, but in live trading scenarios aggregated dividend data is only available on a quarterly basis. For this reason, we forward-filled the 12-month yields from the beginning of each fiscal quarter (March, June, September, and December) onto each trading day.
+
+  \subsection{Shimko Method}
+    Treasury yields and continuous dividend yields provide an idealized model for pricing options, but real-world options prices account for costs of carry, discrete dividends, and various sources of trading friction. To address this reality, \citet{shimko_bounds_1993} demonstrated an empirical approach using put-call parity to derive the market-implied interest rates and dividend yields. In particular, put-call parity can be expressed as:
+
+    \begin{align}
+      C - P &= S {\rm e}^{-q T} - K {\rm e}^{-r T}
+    \end{align}
+
+    Formulating this as a linear regression problem:
+
+    \begin{align}
+      y &= m x + b \notag \\
+      C - P &= m K + b
+    \end{align}
+
+    Where $m = -{\rm e}^{-r T}$ and $b = S {\rm e}^{-q T}$. For any given trade date and expiry date, the $C - P$ values observable at different strikes $K$ form a downward sloping line, the parameters of which allow us to solve for $r$ and $q$.
+    
+  \subsection{Computing Q-Measures and P-Measures}
+    The FRED/Shiller and Shimko methods provided the $r$ and $q$ inputs to the Black-Scholes-Merton equations, making it possible to reverse-engineer the volatility parameter $\sigma$ that best reproduces observed options prices. To perform this reverse-engineering, we used Scipy's implementation of Brent's method (with the Newton-Raphson method as a backup in case of non-convergence) for finding roots. We then dropped any rows where both root-finding algorithms failed to converge on a solution for $\sigma$.
+
+    One challenge with comparing option-implied risk-neutral probabilities to real-world probabilities is that neither distribution is stationary: both distributions change as the market accounts for new information. Not only do the statistical moments change over time, but the distributional forms vary from one market context to another. Fortunately, with the implied volatility, risk-free rate, and dividend yield now available, equations \eqref{eq:q_measure_c} and \eqref{eq:q_measure_p} make it straightforward to compute the risk-neutral probability $Q(ITM)$ of each contract expiring in-the-money. For each of the roughly 30 million contracts sampled, we also kept track of whether the real-world expiry occured in-the-money or out-of-the-money. By rounding $Q$-measures to the nearest percent and grouping all contracts with the same $Q$-measures together, we obtained a large number of contracts whose real-world $P(ITM)$ could then be computed. Figures \ref{fig:fred_shiller_n} and \ref{fig:shimko_n} show the number of samples available at each rounded $Q$-measure under the FRED/Shiller and Shimko methods, respectively. In each bin, the number of contracts ranges from tens of thousands to millions and is generally on the order of 100K.
+
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.8\textwidth]{fred_shiller_n_.png}
+        \caption{The number of samples in each $Q$ bin for the FRED/Shiller method, from which $P$ is computed.}
+        \label{fig:fred_shiller_n}
+    \end{figure}
+
+    \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.8\textwidth]{shimko_n_.png}
+        \caption{The number of samples in each $Q$ bin for the Shimko method, from which $P$ is computed.}
+        \label{fig:shimko_n}
+    \end{figure}
+
+\section{Future Work}
+  We assumed that the most recent quarterly dividend yield data is relevant for pricing options contracts, but the truth is that yields change over time and future yields may be different from the 12-month trailing yields posted last quarter. To rectifiy this, future research could apply a predictive model to S\&P 500 yields to better capture the market's anticipated dividend that is baked into options prices.
+
+\bibliographystyle{elsarticle-harv} 
+\bibliography{references}
+
+\end{document}
+
+\endinput
+%%
+%% End of file
