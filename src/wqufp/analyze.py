@@ -361,10 +361,12 @@ def generate_method_comparison_graphs(
     puts_shimko: pd.DataFrame
         Shimko puts-only dataframe from get_measures().
     """
+    y_lim = (-0.04, 0.04)  # Set manually
+
     x_label = "Q"
-    y_label = "Q"
+    y_label = "Q-P"
     x_axis_label = "Q(ITM)"
-    y_axis_label = r"$Q_{\text{Shimko}}-Q{\text{FRED_Shiller}}"
+    y_axis_label = "∆(Q-P)"
 
     detrend_label = ""
     detrend_suffix = ""
@@ -376,9 +378,8 @@ def generate_method_comparison_graphs(
 
     fn = IMG_PATH / f"shimko_minus_fred_shiller_q_{detrend_suffix}.png"
 
-    y_lim = (-0.04, 0.02)
     fig, axs = plt.subplots(3, 1, figsize=(12, 12))
-    fig.suptitle(f"Comparing Shimko Q Minus FRED/Shiller Q{detrend_label}")
+    fig.suptitle(f"Comparing Shimko (Q-P) Minus FRED/Shiller (Q-P){detrend_label}")
 
     ax = axs[0]
     y = x_shimko[y_label] - x[y_label]
