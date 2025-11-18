@@ -21,6 +21,8 @@
 \usepackage{graphicx}
 \graphicspath{ {./images/} }
 
+\usepackage{caption}
+
 \journal{WorldQuant University Capstone Course 690}
 
 \begin{document}
@@ -28,7 +30,7 @@
 
 \begin{frontmatter}
 
-    \title{Exploration of Risk Neutral Density and Pricing Kernels in Equity Markets\tnoteref{t1}}
+    \title{Rough Draft: Empirical Computation of Probability Risk Premia in the S\&P 500 Index\tnoteref{t1}}
     \tnotetext[t1]{November 18, 2025 - This document is submitted to the WorldQuant University Capstone 690 course as a requirement for the M.Sc. in Financial Engineering.} 
 
     \author{Ryan Cardenas}
@@ -37,7 +39,7 @@
 
   
     \begin{abstract}
-    %% ToDo: Write abstract.
+    TODO: Write abstract.
     \end{abstract}
 
     %% Keywords
@@ -49,37 +51,14 @@
 
 
 %% Use \section commands to start a section
-\section{Background}
-  \label{background}
-  Risk-neutral densities (RNDs) have fascinated researchers in financial engineering ever since \citet{black_pricing_1973} first published their risk-neutral method for pricing European options. In the years that followed, \citet{ross_arbitrage_1976} introduced the concepts of state-prices and stochastic discount factors (SDF, also called "pricing kernels"), which represent the risk-neutral value of future payoff states and the weight investors apply to those states, respectively. \citet{breeden_prices_1978} then presented a method for extracting risk-neutral densities using call option prices across different strikes, enabling a generation of researchers to explore empirical methods for deriving insights from options prices.
+\section{Introduction}
+  Risk-neutral probabilities have fascinated researchers in financial engineering ever since \citet{black_pricing_1973} first published their risk-neutral method for pricing European options. In the years that followed, \citet{ross_arbitrage_1976} introduced the concepts of state-prices and stochastic discount factors (also called "pricing kernels"), which represent the risk-neutral value of future payoff states and the weight investors apply to those states, respectively. \citet{breeden_prices_1978} then presented a model-free method for extracting risk-neutral probability densities using call option prices across different strikes, enabling a generation of researchers to explore empirical methods for deriving insights from options prices.
 
-  One such insight is depicted in \citet{figlewski_risk-neutral_2018}: when compared against a lognormal distribution with volatility derived from a weighted combination of historical volatility and the VIX, the options-implied RND displays a noticeable negative skew and body that is shifted to the right. The ratio of the two distributions discounted by the risk-free rate produces a pricing kernel that places heavy weight on lower states with a temporary "hill" at intermediate higher states before continuing to slope downward. This common and well-documented behavior contrasts starkly with the downward-sloping monotonicity predicted by utility theory, producing a conundrum that \citet{jackwerth_option-implied_2004} calls the "pricing kernel puzzle".
+  One such insight is depicted in \citet{figlewski_risk-neutral_2018}: when compared against a lognormal distribution with volatility derived from a weighted combination of historical volatility and the VIX, the options-implied risk-neutral probability distribution displays a noticeable negative skew and body that is shifted to the right. The ratio of the two distributions discounted by the risk-free rate produces a pricing kernel that places heavy weight on lower states with a temporary "hill" at intermediate higher states before continuing to slope downward. This common and well-documented behavior contrasts starkly with the downward-sloping monotonicity predicted by utility theory, producing a conundrum that \citet{jackwerth_option-implied_2004} calls the "pricing kernel puzzle".
 
-  At the same time, another commonly observed phenomenon known as the "volatility smile" reveals that options with different strikes generate different implied volatilities, suggesting that the market incorporates additional risk-premia for strikes far from the underlying. Are these strike-dependent premia due to market participants anticipating higher real-world probabilities for these future states, or are they the result of asymetrical, wealth-dependent aversion to large losses and preference toward modest gains? \citet{jackwerth_option-implied_2004}, \citet{figlewski_risk-neutral_2018}, \citet{shiratsuka_information_2001}, and \citet{anagnou_relation_2002} all indicate that RNDs are poor predictors of real-world probabilities while acknowledging the difficulties in ruling them out as predictors. 
+  At the same time, another commonly observed phenomenon known as the "volatility smile" reveals that options with different strikes generate different implied volatilities, suggesting that the market incorporates additional risk-premia for strikes far from the underlying. Are these strike-dependent premia due to market participants anticipating higher real-world probabilities for these future states, or are they the result of asymetrical, wealth-dependent aversion to large losses and preference toward modest gains? \citet{jackwerth_option-implied_2004}, \citet{figlewski_risk-neutral_2018}, \citet{shiratsuka_information_2001}, and \citet{anagnou_relation_2002} all indicate that risk-neutral probabilities are poor predictors of real-world probabilities while acknowledging the difficulties in ruling them out as predictors. Regardless of its source, the discrepancy between implied volatility and realized volatility--the so-called "volatility risk premium"--suggests that market participants are influenced by more than just real-world probabilities.
 
-
-\section{Objectives}
-  \label{objectives}
-  I initially planned to develop an RND-based model for estimating future price distributions, but upon discovering multiple authors who have indicated this cannot be done, I have broadened the scope of my investigation to address a handful of questions that arose in the course of my background reading. These questions are:
-  \begin{enumerate}
-    \item To what extent do the "market-wide" state-prices (modeled as market-dependent stock states via CAPM) and their corresponding risk-neutral probabilities match the risk-neutral probabilities implied by options prices on indices and individual stocks?
-    \item To what extent do RNDs for different maturities exhibit a term structure that can be used to model path-dependent options?
-    \item Can real-world probabilities be derived from risk-neutral densities, and how do either set of probabilities compare to empirical distributions of asset returns?
-    \item How does variance risk premium vary with risk-free rate?
-    \item How does IV (as a function of moneyness) vary with risk-free rate?
-    \item How do IV curves and their associated RNDs change over time?
-    \item How do pricing kernels vary with recent volatility?
-    \item Can a ML model be trained to extract the pricing kernel?
-    \item To what extent do early-exercise premiums in American puts (for non-dividend-paying stocks) match or predict Q-measure and P-measure probabilities?
-    \item To what extent do differences in call/put implied volatilities effect pricing kernels, Q-measure probabilities, and P-measure probabilities?
-    \item To what extent are delta-implied probabilities consistent with P- or Q- measure probabilities, and how does this relationship vary with risk-neutral probability?
-  \end{enumerate}
-  That multiple authors have argued against using RNDs for prediction does not necessarily mean it is impossible, but their arguments for why it \textit{might} not be possible are compelling enough to merit further analysis. In the event my analysis of recent market data confirms their claims, this result alone may be worthy of publication. At the very least, the questions above should provided sufficient opportunity for exploration.
-
-
-\section{Theory}
-  \label{theory}
-    pass
+  This all begs the questions: how do risk-neutral probabilities generally compare to their real-world counterparts? Additionally, how does this relationship--the \textit{probability} risk premium--vary across different strikes or moneyness levels? To address these two questions, we looked to the past.
 
 \section{Methodology}
   \label{methodology}
@@ -87,7 +66,7 @@
   \subsection{General Index and Options Data}
     We downloaded historical, raw (non-adjusted) OHLC data recorded at daily intervals for the S\&P 500 index (SPX) from Yahoo Finance. In computing option contract payoffs at expiry, we used SPX prices at market open for standard options, which are AM-settled on the third Friday of each month. For all non-standard "weekly" options, which are PM-settled, we used SPX prices at market close.
 
-    We obtained 15 years of end-of-day SPX options data (2010 through 2024) from \citet{firstrate_data_historical_nodate}, totaling over 30 million rows. This data includes trade date, expiry date, strike, bid price, and ask price. Although FirstRate Data also provides options Greeks, the underlying model assumptions are not available, so we recomputed the relevant values ourselves using the Black-Scholes-Merton equations shown below:
+    We obtained 15 years of end-of-day SPX options data (2010 through 2024) from \citet{firstrate_data_historical_nodate}, totaling over 30 million rows--one for each contract-day. This data includes trade date, expiry date, strike, bid price, and ask price. Although FirstRate Data also provides options Greeks, the underlying model assumptions are not available, so we recomputed the relevant values ourselves using the Black-Scholes-Merton equations shown below:
 
     \begin{align}
         &d_1 = \frac{
@@ -117,7 +96,23 @@
     Our approach to computing Q-probabilities relied on extracting implied volatilities from options prices. Doing so, however, required two economic inputs: the risk-free rate and the dividend yield. To derive these inputs, we explored two methods.
 
   \subsection{FRED/Shiller Method}
-    The Federal Reserve Bank of St. Louis \citep{fred_federal_2025} provides daily treasury yield data, which we downloaded via the FRED API in Python. Specifically, we obtained market yields on U.S. treasury securities quoted on an investment basis for 1-month, 3-month, 6-month, 1-year, 2-year, 3-year, 5-year, 7-year, 10-year, 20-year, and 30-year maturities. To represent overnight yields, we concatenated the Effective Federal Funds Rate (EFFR) with the Secured Overnight Financing Rate (SOFR). SOFR data is only available from 2018 onward; for all earlier dates, we used EFFR as the overnight rate. We then applied a cublic spline interpolation to the treasury yields as a function of years-to-maturity, producing a term structure useful for modeling risk-free rates for options contracts with various expirations.
+    The Federal Reserve Bank of St. Louis \citep{fred_federal_2025} provides daily treasury yield data, which we downloaded via the FRED API in Python. Specifically, we obtained market yields on U.S. treasury securities quoted on an investment basis for 1-month, 3-month, 6-month, 1-year, 2-year, 3-year, 5-year, 7-year, 10-year, 20-year, and 30-year maturities. To represent overnight yields, we concatenated the Effective Federal Funds Rate (EFFR) with the Secured Overnight Financing Rate (SOFR). SOFR data is only available from 2018 onward; for all earlier dates, we used EFFR as the overnight rate. We then applied a cublic spline interpolation to the treasury yields as a function of years-to-maturity, producing a term structure useful for modeling risk-free rates for options contracts with various expirations. Figure \ref{fig:yield_1} shows an example yield curve with a one-year horizon constructed from data on November 1, 2025. Figure \ref{fig:yield_30} shows the same yield curve with a 30-year horizon.
+
+    \begin{figure}[btp]
+      \centering
+      \includegraphics[width=1\textwidth]{yield_curve_1y_on_2025-11-01.png}
+      \captionsetup{width=.5\linewidth}
+      \caption{Term structure on November 1, 2025, constructued via cubic spline interpolation. On this particular day, treasury yields varied from 3.7\% to just over 4.2\%.}
+      \label{fig:yield_1}
+    \end{figure}
+
+    \begin{figure}[btp]
+      \centering
+      \includegraphics[width=1\textwidth]{yield_curve_30y_on_2025-11-01.png}
+      \captionsetup{width=.5\linewidth}
+      \caption{The same term structure as in Fig. \ref{fig:yield_1}, but zoomed out to view the full 30-year horizon. At this scale, we see the full range of yields from 3.6\% to 4.7\%.}
+      \label{fig:yield_30}
+    \end{figure}
 
     To model dividend yields, we accessed S\&P 500 quarterly dividend data curated by Yale Professor Robert J. Shiller \citep{shiller_shiller_2025}. These dividend yields average over a trailing 12-month period. Shiller retroactively interpolates this data to monthly intervals, but in live trading scenarios aggregated dividend data is only available on a quarterly basis. For this reason, we forward-filled the 12-month yields from the beginning of each fiscal quarter (March, June, September, and December) onto each trading day.
 
@@ -140,18 +135,20 @@
   \subsection{Computing Q-Measures and P-Measures}
     The FRED/Shiller and Shimko methods provided the $r$ and $q$ inputs to the Black-Scholes-Merton equations, making it possible to reverse-engineer the volatility parameter $\sigma$ that best reproduces observed options prices. To perform this reverse-engineering, we used Scipy's implementation of Brent's method for finding roots, with the Newton-Raphson method as a backup in case of non-convergence. We then dropped any rows where both root-finding algorithms failed to converge on a solution for $\sigma$.
 
-    One challenge with comparing option-implied risk-neutral probabilities to real-world probabilities is that neither distribution is stationary: both distributions change as the market accounts for new information. Not only do the statistical moments change over time, but the distributional forms vary from one market context to another. Fortunately, with the implied volatility, risk-free rate, and dividend yield now available, equations \eqref{eq:q_measure_c} and \eqref{eq:q_measure_p} made it straightforward to compute the risk-neutral probability $Q(\text{ITM})$ of each contract expiring in-the-money. For each of the roughly 30 million contracts sampled, we also kept track of whether the real-world expiry occured in-the-money or out-of-the-money. By rounding $Q$-measures to the nearest percent and grouping all contracts with the same $Q$-measures together, we obtained a large number of contracts whose real-world $P(\text{ITM})$ could then be computed. Figures \ref{fig:fred_shiller_n} and \ref{fig:shimko_n} show the number of samples available in each $Q$-measure bin under the FRED/Shiller and Shimko methods, respectively. In each bin, the number of contracts ranged from tens of thousands to millions and was generally on the order of 100K.
+    One challenge with comparing option-implied risk-neutral probabilities to real-world probabilities is that neither distribution is stationary: both distributions change as the market accounts for new information. Not only do the statistical moments change over time, but the distributional forms vary from one market context to another. Fortunately, with the implied volatility, risk-free rate, and dividend yield now available, equations \eqref{eq:q_measure_c} and \eqref{eq:q_measure_p} made it straightforward to compute the risk-neutral probability $Q(\text{ITM})$ of each contract expiring in-the-money. For each of the roughly 30 million contract-days sampled, we also kept track of whether the real-world expiry occured in-the-money or out-of-the-money. By rounding $Q$-measures to the nearest percent and grouping all contracts with the same $Q$-measures together, we obtained a large number of contracts whose real-world $P(\text{ITM})$ could then be computed in aggregate. Figures \ref{fig:fred_shiller_n} and \ref{fig:shimko_n} show the number of samples available in each $Q$-measure bin under the FRED/Shiller and Shimko methods, respectively. In each bin, the number of samples ranged from tens of thousands to millions and was generally on the order of 100K.
 
-    \begin{figure}[htbp]
+    \begin{figure}[btp]
         \centering
-        \includegraphics[width=0.8\textwidth]{fred_shiller_n_.png}
+        \includegraphics[width=1\textwidth]{fred_shiller_n_.png}
+        \captionsetup{width=.5\linewidth}
         \caption{The number of samples in each $Q$ bin for the FRED/Shiller method, from which $P$ is computed.}
         \label{fig:fred_shiller_n}
     \end{figure}
 
-    \begin{figure}[htbp]
+    \begin{figure}[btp]
         \centering
-        \includegraphics[width=0.8\textwidth]{shimko_n_.png}
+        \includegraphics[width=1\textwidth]{shimko_n_.png}
+        \captionsetup{width=.5\linewidth}
         \caption{The number of samples in each $Q$ bin for the Shimko method, from which $P$ is computed. These values are similar to those in Fig. \ref{fig:fred_shiller_n}, but with a sharper peak at high $Q$ values.}
         \label{fig:shimko_n}
     \end{figure}
@@ -163,9 +160,9 @@
       m = {\rm e}^{-r T} \frac{dQ}{dP}
     \end{align}
 
-    If $Q$ and $P$ are related through investors' risk preferences and historical $P$ shows a consistent uptrend, then it is not unreasonable to consider whether the residual $Q-P$ implied by options prices accounts for the historical market uptrend. By subtracting the average upward SPX drift and reconstructing the SPX price at expiry, we obtained the detrended SPX expiry price $\hat{S}_f$ and used it to compute $\hat{P}$, the real-world probability of expiring ITM under the detrended market process.
+    If $Q$ and $P$ are related through investors' risk preferences and historical $P$ shows a consistent uptrend, then it is not unreasonable to consider whether the probability risk premium--denoted by $Q-P$ and implied by options prices--accounts for the historical market uptrend. By subtracting the average upward SPX drift and reconstructing the SPX price at expiry, we obtained the detrended SPX expiry price $\hat{S}_f$ and used it to compute $\hat{P}$, the real-world probability of expiring ITM under the detrended market process.
 
-    Since market participants only ever have access to present and past data, we computed the expanding mean log-return $\mu_t$ at daily intervals, with the left side anchored at Yahoo Finance's earliest available date for SPX--back in the 1920's-- and the right side rolling at date $t$. For each of the roughly 30 million contracts, we reconstructed the price series $\hat{S}_t$ by subtracting $\mu_t$ from the daily log-returns and summing the resulting, detrended returns:
+    Since market participants only ever have access to present and past data, we computed the expanding mean log-return $\mu_t$ at daily intervals, with the left side anchored at Yahoo Finance's earliest available date for SPX--back in the 1920's-- and the right side rolling at date $t$. For each of the roughly 30 million contract-days, we reconstructed the price series as $\hat{S}_t$ by subtracting $\mu_t$ from the daily log-returns and summing the resulting, detrended returns from entry to expiry:
 
     \begin{align}
       \hat{S}_f = S_t \exp{
@@ -177,7 +174,7 @@
       }
     \end{align}
 
-    For standard index options with their AM-settlements, we modified this by computing a second trend average $\mu_t^\ast$ to represent the mean overnight log-return, measured from one day's closing price to the next day's opening price. We then replaced the last value $\mu_T$ with the overnight average $\mu_T^\ast$ to detrend the underlying for standard contracts:
+    For standard index options with their AM-settlements, we modified this by computing a second trend average $\mu_t^\ast$ representing the mean overnight log-return, measured from one day's closing price to the next day's opening price. We then replaced the final value $\mu_T$ with the overnight average $\mu_T^\ast$ to detrend the underlying for standard contracts:
 
     \begin{align}
       \hat{S}_f = S_t \exp{
@@ -193,42 +190,83 @@
       }
     \end{align}
 
-    These detrended final states $S_f^\ast$ produced new probabilities $P^\ast$ without changing the risk-neutral probabilities $Q$, which derive from options prices at the entry date. Comparing $Q-P^\ast$ to $Q-P$ allowed us to measure the impact of historical market drift.
+    These detrended final states $S_f^\ast$ produced new probabilities $P^\ast$ without changing the risk-neutral probabilities $Q$, which derive from options prices at the entry date. Comparing $Q-P^\ast$ to $Q-P$ allowed us to measure the impact of historical market drift on probability risk premia.
 
 \section{Results and Discussion}
-    \subsection{Method Comparison on True Underlying Prices}
+    \subsection{Method Comparison on Real-World Underlying}
+      Figures \ref{fig:fred_shiller_q_minus_p} and \ref{fig:shimko_q_minus_p} show the probability risk premia $Q-P$ produced via the FRED/Shiller and Shimko methods, respectively, plotted against $Q$ on the horizontal axis. The orange curves represent calls only; the purple curves show puts only; the blue curves show premia averaged over all contracts. The green and red shaded regions depict areas where the overall premia are positive and negative, respectively.
 
-      \begin{figure}[htbp]
+      According to these charts, call options consistently underestimate the probability of expiring ITM for virtually all values of $Q$--which roughly correlate with the more commonly used deltas that traders often refer to as a proxy for $Q$. The largest discrepancy occurs at strikes that are just slightly OTM, as represented by the orange curve's minimum value located at $Q\approx40\%$. This extremum shows that $Q$ can be as much as 25\% lower than $P$ for call options. By way of example, an average call option with a Prob(ITM) of 40\% (and a delta of roughly 0.4) will, in reality, expire in-the-money 65\% of the time.
+      
+      In contrast, puts consistently overestimate the probability of expiring ITM for virtually all values of $Q$, with the peak PRP occuring just slightly ITM at $Q\approx60\%$. This extremum shows that $Q$ can be up to 25\% \textit{higher} than $P$ for put options. In other words, an average put option with a Prob(ITM) of 60\% (and a delta of roughly 0.6) will, in reality, expire-in-the-money only 35\% of the time.
+      
+      Together, the PRPs for all contracts are generally positive OTM and negative ITM, approaching zero ATM. This means that, for OTM strikes, the probability risk premia from put options outweigh those of call options; the opposite is true for ITM strikes. One implication is that trading strategies involving buying calls and selling puts may have a statistical edge on expiration day. In this, both the FRED/Shiller and Shimko methods produce agreeing results. The most notable difference between the two methods is that the probability risk premium from the FRED/Shiller method reaches zero slightly OTM, whereas the PRP obtained via Shimko's method reaches zero ATM, which suggests that Shimko's method may be a more balanced way of obtaining the $r$ and $q$ inputs for the Black-Scholes-Merton equation. 
+
+      \begin{figure}[btp]
         \centering
         \includegraphics[width=1\textwidth]{fred_shiller_q_minus_p_.png}
-        \caption{caption}
+        \captionsetup{width=.5\linewidth}
+        \caption{Probability risk premia obtained via the FRED/Shiller method for calls (orange), puts (purple), and all contracts (blue) at each $Q$-measure bin. The green and red shaded areas depict positive and nengative premia, respectively. Notice how the premia for all contracts is slightly asymetrical, reaching zero just left of center, at roughly $Q=45\%$.}
         \label{fig:fred_shiller_q_minus_p}
       \end{figure}
 
-      \begin{figure}[htbp]
+      \begin{figure}[btp]
         \centering
         \includegraphics[width=1\textwidth]{shimko_q_minus_p_.png}
-        \caption{caption}
+        \captionsetup{width=.5\linewidth}
+        \caption{Probability risk premia obtained via the Shimko method for calls (orange), puts (purple), and all contracts (blue) at each $Q$-measure bin. Unlike that of the FRED/Shiller method, the blue curve in this graph reaches zero at-the-money, where $Q=50\%$. This suggests that the Shimko method is a more balanced approach to deriving inputs for the Black-Scholes-Merton equation.}
         \label{fig:shimko_q_minus_p}
       \end{figure}
 
-      \begin{figure}[htbp]
+    \subsection{Method Comparison on Detrended Underlying}
+      Detrending SPX returns allows us to examine the probability risk premium in a world where stock market prices are generally stationary--at least throughout the lifetime of an option contract. By comparing PRP under a detrended stochastic process to the PRP generated by real-world prices, we can determine the extent to which SPX's historical uptrend influences the PRP. Figures \ref{fig:fred_shiller_q_minus_p_detrended} and \ref{fig:shimko_q_minus_p_detrended} show the probability risk premia $Q-P$ produced via the FRED/Shiller and Shimko methods, respectively, under the detrended stock process.
+
+      Whereas the real-world PRP is positive for puts and negative for calls, the detrended PRP is positive for both OTM puts and call, but is negative for ITM puts and call. The FRED/Shiller and Shimko methods both generate PRP curves that are, in aggregate for all contracts, symmetrical about the $Q=50\%$ vertical line. Furthermore, call PRPs generally follow the S-shaped pattern of the puts, but with a negative offset that converges to zero at either extremum. This finding suggests that, while the historical market uptrend may account for some of the probability risk premia for calls and puts, it does not fully explain the premia priced into OTM puts or ITM calls; meanwhile, it seems to overexplain the premia priced into OTM calls and ITM puts.
+
+      \begin{figure}[btp]
         \centering
         \includegraphics[width=1\textwidth]{fred_shiller_q_minus_p_detrended.png}
-        \caption{caption}
+        \captionsetup{width=.5\linewidth}
+        \caption{Probability risk premia under the detrended SPX process, obtained via the FRED/Shiller method. In comparison to the non-detrended version of this graph in Fig. \ref{fig:fred_shiller_q_minus_p}, the blue curve here is symmetrical and reaches zero at $Q=50\%$. Strangely, the sign of $Q-P$ for OTM calls and ITM puts is flipped, resulting in S-shaped curves.}
         \label{fig:fred_shiller_q_minus_p_detrended}
       \end{figure}
 
-      \begin{figure}[htbp]
+      \begin{figure}[btp]
         \centering
         \includegraphics[width=1\textwidth]{shimko_q_minus_p_detrended.png}
-        \caption{caption}
+        \captionsetup{width=.5\linewidth}
+        \caption{Probability risk premia under the detrended SPX process, obtained via the Shimko method. These curves are difficult to distinguish from those of the detrended FRED/Shiller method.}
         \label{fig:shimko_q_minus_p_detrended}
       \end{figure}
 
+    \subsection{Differences Between FRED/Shiller and Shimko Probability Risk Premium}
+      TODO: This section needs to be written.
 
-\section{Future Work}
-  We assumed that the most recent quarterly dividend yield data is relevant for pricing options contracts, but the truth is that yields change over time and future yields may be different from the 12-month trailing yields posted last quarter. To rectifiy this, future research could apply a predictive model to S\&P 500 yields to better capture the market's anticipated dividend that is baked into options prices.
+      \begin{figure}[btp]
+        \centering
+        \includegraphics[width=1\textwidth]{shimko_minus_fred_shiller_q_.png}
+        \captionsetup{width=.5\linewidth}
+        \caption{Differences between probability risk premia for the Shimko method and for the FRED/Shiller method, plotted across each $Q$-bin. Green regions depict the Shimko probability risk premia exceeding that of the FRED/Shiller method; red regions show a relative defecit. For most $Q$-measures, the Shimko method produces a higher PRP for calls and a lower PRP for puts. At extreme ITM $Q$-measures, Shimko shows a slightly lower PRP calls and an exceedingly lower PRP for puts.}
+        \label{fig:shimko_minus_fred_shiller_q}
+      \end{figure}
+
+      \begin{figure}[btp]
+        \centering
+        \includegraphics[width=1\textwidth]{shimko_minus_fred_shiller_q_detrended.png}
+        \captionsetup{width=.5\linewidth}
+        \caption{Differences between probability risk premia under the detrended SPX process for the Shimko method and for the FRED/Shiller method, plotted across each $Q$-bin. For most $Q$-measures, the Shimko method still produces a higher PRP for calls and a lower PRP for puts, however the distribution of these premia is different under the detrended process. Here, the largest premia occur at-the-money and are more balanced about the $Q=50\%$ vertical line.}
+        \label{fig:shimko_minus_fred_shiller_q_detrended}
+      \end{figure}
+
+
+\section{Conclusion and Future Work}
+  TODO: A summary of findings needs to be written.
+
+  In assessing the impact of the historical market trend on probability risk premia, we simply subtracted the drift term $\mu_t$ from daily log-returns. However, $Q$-probabilities assume an equivalent martingale measure that discounts future states according to the risk-free rate $r$. Accordingly, future efforts should re-examine the $Q$-dependent probability risk premia after subtracting $\mu_t-r$ from daily log-returns.
+  
+  We assumed that the most recent quarterly dividend yield data is relevant for pricing options contracts, but the truth is that yields change over time and future yields may be different from the 12-month trailing yields posted last quarter. To rectifiy this, future research could apply a predictive model to S\&P 500 yields--such as a linear extrapolation--to better capture the market's anticipated dividend that is baked into options prices.
+
+  TODO: Expand upon areas for future research.
 
 \bibliographystyle{elsarticle-harv} 
 \bibliography{references}
