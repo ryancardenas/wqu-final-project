@@ -112,7 +112,7 @@
       &Q_P(\text{ITM}) = F(-d_2) \label{eq:q_measure_p}
     \end{align}
 
-    Where $F(\cdot)$ is the normal cumulative distribution function, $S$ is the underlying price at entry, $K$ is the strike price, $r$ is the annualized risk-free rate, $q$ is the annualized continuous dividend yield, $T$ is the years to maturity (e.g. $T=\frac{1}{12}$ for a one-month maturity), and $\sigma$ is the volatility of the underlying geometric Brownian motion process that generates $S$. The symbol $\Delta$ represents the options delta--the rate of change of options price with respect to underlying price. $Q(ITM)$ (or simply $Q$) represents the risk-neutral probability of expiring in-the-money and is different from the real-life probability $P$, which is easy to compute only in hindsight.
+    Where $F(\cdot)$ is the normal cumulative distribution function, $S$ is the underlying price at entry, $K$ is the strike price, $r$ is the annualized risk-free rate, $q$ is the annualized continuous dividend yield, $T$ is the years to maturity (e.g. $T=\frac{1}{12}$ for a one-month maturity), and $\sigma$ is the volatility of the underlying geometric Brownian motion process that generates $S$. The symbol $\Delta$ represents the options delta--the rate of change of options price with respect to underlying price. $Q(\text{ITM})$ (or simply $Q$) represents the risk-neutral probability of expiring in-the-money and is different from the real-life probability $P$, which is easy to compute only in hindsight.
 
     Our approach to computing Q-probabilities relied on extracting implied volatilities from options prices. Doing so, however, required two economic inputs: the risk-free rate and the dividend yield. To derive these inputs, we explored two methods.
 
@@ -138,9 +138,9 @@
     Where $m = -{\rm e}^{-r T}$ and $b = S {\rm e}^{-q T}$. For any given trade date and expiry date, the $C - P$ values observable at different strikes $K$ form a downward sloping line, the parameters of which allow us to solve for $r$ and $q$.
     
   \subsection{Computing Q-Measures and P-Measures}
-    The FRED/Shiller and Shimko methods provided the $r$ and $q$ inputs to the Black-Scholes-Merton equations, making it possible to reverse-engineer the volatility parameter $\sigma$ that best reproduces observed options prices. To perform this reverse-engineering, we used Scipy's implementation of Brent's method (with the Newton-Raphson method as a backup in case of non-convergence) for finding roots. We then dropped any rows where both root-finding algorithms failed to converge on a solution for $\sigma$.
+    The FRED/Shiller and Shimko methods provided the $r$ and $q$ inputs to the Black-Scholes-Merton equations, making it possible to reverse-engineer the volatility parameter $\sigma$ that best reproduces observed options prices. To perform this reverse-engineering, we used Scipy's implementation of Brent's method for finding roots, with the Newton-Raphson method as a backup in case of non-convergence. We then dropped any rows where both root-finding algorithms failed to converge on a solution for $\sigma$.
 
-    One challenge with comparing option-implied risk-neutral probabilities to real-world probabilities is that neither distribution is stationary: both distributions change as the market accounts for new information. Not only do the statistical moments change over time, but the distributional forms vary from one market context to another. Fortunately, with the implied volatility, risk-free rate, and dividend yield now available, equations \eqref{eq:q_measure_c} and \eqref{eq:q_measure_p} make it straightforward to compute the risk-neutral probability $Q(ITM)$ of each contract expiring in-the-money. For each of the roughly 30 million contracts sampled, we also kept track of whether the real-world expiry occured in-the-money or out-of-the-money. By rounding $Q$-measures to the nearest percent and grouping all contracts with the same $Q$-measures together, we obtained a large number of contracts whose real-world $P(ITM)$ could then be computed. Figures \ref{fig:fred_shiller_n} and \ref{fig:shimko_n} show the number of samples available at each rounded $Q$-measure under the FRED/Shiller and Shimko methods, respectively. In each bin, the number of contracts ranges from tens of thousands to millions and is generally on the order of 100K.
+    One challenge with comparing option-implied risk-neutral probabilities to real-world probabilities is that neither distribution is stationary: both distributions change as the market accounts for new information. Not only do the statistical moments change over time, but the distributional forms vary from one market context to another. Fortunately, with the implied volatility, risk-free rate, and dividend yield now available, equations \eqref{eq:q_measure_c} and \eqref{eq:q_measure_p} made it straightforward to compute the risk-neutral probability $Q(\text{ITM})$ of each contract expiring in-the-money. For each of the roughly 30 million contracts sampled, we also kept track of whether the real-world expiry occured in-the-money or out-of-the-money. By rounding $Q$-measures to the nearest percent and grouping all contracts with the same $Q$-measures together, we obtained a large number of contracts whose real-world $P(\text{ITM})$ could then be computed. Figures \ref{fig:fred_shiller_n} and \ref{fig:shimko_n} show the number of samples available in each $Q$-measure bin under the FRED/Shiller and Shimko methods, respectively. In each bin, the number of contracts ranged from tens of thousands to millions and was generally on the order of 100K.
 
     \begin{figure}[htbp]
         \centering
@@ -152,9 +152,80 @@
     \begin{figure}[htbp]
         \centering
         \includegraphics[width=0.8\textwidth]{shimko_n_.png}
-        \caption{The number of samples in each $Q$ bin for the Shimko method, from which $P$ is computed.}
+        \caption{The number of samples in each $Q$ bin for the Shimko method, from which $P$ is computed. These values are similar to those in Fig. \ref{fig:fred_shiller_n}, but with a sharper peak at high $Q$ values.}
         \label{fig:shimko_n}
     \end{figure}
+
+  \subsection{Detrending}
+    In addition to computing $P$-measures from binned expiry data, we also examined the effect of drift on the relationship between $Q$ and $P$. The stock market's tendency to drift upward over time is a commonly observed historical behavior that may influence the extent to which $Q$ over- or underestimates $P$. This is because the pricing kernel $m$ (also called the "stochastic discount factor") represents the $P$-probabilities investors currently expect for an asset, modified by their risk premia. Formally, $m$, $Q$, and $P$ are related through the equation:
+
+    \begin{align}
+      m = {\rm e}^{-r T} \frac{dQ}{dP}
+    \end{align}
+
+    If $Q$ and $P$ are related through investors' risk preferences and historical $P$ shows a consistent uptrend, then it is not unreasonable to consider whether the residual $Q-P$ implied by options prices accounts for the historical market uptrend. By subtracting the average upward SPX drift and reconstructing the SPX price at expiry, we obtained the detrended SPX expiry price $\hat{S}_f$ and used it to compute $\hat{P}$, the real-world probability of expiring ITM under the detrended market process.
+
+    Since market participants only ever have access to present and past data, we computed the expanding mean log-return $\mu_t$ at daily intervals, with the left side anchored at Yahoo Finance's earliest available date for SPX--back in the 1920's-- and the right side rolling at date $t$. For each of the roughly 30 million contracts, we reconstructed the price series $\hat{S}_t$ by subtracting $\mu_t$ from the daily log-returns and summing the resulting, detrended returns:
+
+    \begin{align}
+      \hat{S}_f = S_t \exp{
+        \left(\displaystyle \sum_{\tau=t+1}^{T}{
+          \ln{
+            \left(\frac{S_\tau}{S_{\tau-1}}\right)
+          } - \mu_\tau
+        }\right)
+      }
+    \end{align}
+
+    For standard index options with their AM-settlements, we modified this by computing a second trend average $\mu_t^\ast$ to represent the mean overnight log-return, measured from one day's closing price to the next day's opening price. We then replaced the last value $\mu_T$ with the overnight average $\mu_T^\ast$ to detrend the underlying for standard contracts:
+
+    \begin{align}
+      \hat{S}_f = S_t \exp{
+        \left(
+          \ln{
+            \left(\frac{S_T}{S_{T-1}}\right)
+          } - \mu_T^\ast +
+          \displaystyle \sum_{\tau=t+1}^{T-1}{
+          \ln{
+            \left(\frac{S_\tau}{S_{\tau-1}}\right)
+          } - \mu_\tau
+        }\right)
+      }
+    \end{align}
+
+    These detrended final states $S_f^\ast$ produced new probabilities $P^\ast$ without changing the risk-neutral probabilities $Q$, which derive from options prices at the entry date. Comparing $Q-P^\ast$ to $Q-P$ allowed us to measure the impact of historical market drift.
+
+\section{Results and Discussion}
+    \subsection{Method Comparison on True Underlying Prices}
+
+      \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=1\textwidth]{fred_shiller_q_minus_p_.png}
+        \caption{caption}
+        \label{fig:fred_shiller_q_minus_p}
+      \end{figure}
+
+      \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=1\textwidth]{shimko_q_minus_p_.png}
+        \caption{caption}
+        \label{fig:shimko_q_minus_p}
+      \end{figure}
+
+      \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=1\textwidth]{fred_shiller_q_minus_p_detrended.png}
+        \caption{caption}
+        \label{fig:fred_shiller_q_minus_p_detrended}
+      \end{figure}
+
+      \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=1\textwidth]{shimko_q_minus_p_detrended.png}
+        \caption{caption}
+        \label{fig:shimko_q_minus_p_detrended}
+      \end{figure}
+
 
 \section{Future Work}
   We assumed that the most recent quarterly dividend yield data is relevant for pricing options contracts, but the truth is that yields change over time and future yields may be different from the 12-month trailing yields posted last quarter. To rectifiy this, future research could apply a predictive model to S\&P 500 yields to better capture the market's anticipated dividend that is baked into options prices.
