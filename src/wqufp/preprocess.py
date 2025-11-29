@@ -738,9 +738,7 @@ if __name__ == "__main__":
     if options_dir is None:
         raise ValueError("OPTIONS_DIR environment variable must be set")
     all_opt_fn_list = sorted(glob.glob(options_dir + "/SPX/*"))
-    data_years = list(pd.Series([c.split("_")[1] for c in all_opt_fn_list]).unique())[
-        :2
-    ]
+    data_years = list(pd.Series([c.split("_")[1] for c in all_opt_fn_list]).unique())
 
     pipeline = partial(
         preprocess_csv_pipeline,
