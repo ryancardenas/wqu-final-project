@@ -14,7 +14,10 @@ import glob
 import os
 import time
 import warnings
+from concurrent.futures import ProcessPoolExecutor
+from functools import partial
 from pathlib import Path
+from typing import Optional
 
 import h5py
 import numpy as np
@@ -28,8 +31,10 @@ from wqufp.yield_curve import RiskFreeYield
 
 load_dotenv()  # Load our secrets from the .env file
 
+MAX_WORKERS = 8
 DAYS_PER_YEAR = 365
-TRG_OPT_DF_DIR = Path("./src/data/opt_df")
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+TRG_OPT_DF_DIR = PACKAGE_ROOT / "data/opt_df"
 
 
 def get_shiller_dividend_yield() -> pd.DataFrame:
@@ -42,7 +47,7 @@ def get_shiller_dividend_yield() -> pd.DataFrame:
     shiller: pd.DataFrame
         Annualized dividend yields, interpolated by Shiller to monthly intervals.
     """
-    shiller_fn = Path("./src/data/ie_data.xls")
+    shiller_fn = PACKAGE_ROOT / "data/ie_data.xls"
     shiller = pd.read_excel(shiller_fn, skiprows=7, sheet_name="Data", dtype=str)[
         ["Date", "P", "D"]
     ].iloc[:-1]
@@ -83,7 +88,7 @@ def get_index_data() -> pd.DataFrame:
         LR-equivalents for SPX.
     """
     # Import SPX historical prices
-    yf_spx_fn = Path("./src/data/yf_spx.csv")
+    yf_spx_fn = PACKAGE_ROOT / "data/yf_spx.csv"
     spx = pd.read_csv(yf_spx_fn).set_index("datetime")[["open", "close"]]
     spx.index = pd.to_datetime(spx.index)
 
@@ -124,7 +129,7 @@ def load_concatenate_options_files(
         Concatenated and filtered options data.
     """
     opt_df = pd.DataFrame()
-    for i in tqdm(range(len(opt_fn_list)), desc="Loading options files into memory..."):
+    for i in range(len(opt_fn_list)):
         tmp = pd.read_csv(opt_fn_list[i], names=cols)
 
         # Ignore out-of-range deltas
@@ -165,21 +170,22 @@ def compute_contract_durations_and_types(
         Options data with dte, T, and standard labels included, and with 'expiry
         date' corrected for the obsolete Saturday convention.
     """
-    print("Casting datestrings as datetimes...")
+
+    # Cast strings as datetime objects
     opt_df["trade date"] = pd.to_datetime(opt_df["trade date"])
     opt_df["expiry date"] = pd.to_datetime(opt_df["expiry date"])
 
-    print("Adjusting for obsolete Saturday expiry convention...")
+    # Adjust for obsolete Saturday expiry convention
     sat_idx = opt_df[opt_df["expiry date"].dt.dayofweek == 5].index
     opt_df.loc[sat_idx, "expiry date"] = opt_df.loc[
         sat_idx, "expiry date"
     ] - pd.Timedelta(days=1)
 
-    print("Computing contract duration...")
+    # Compute contract duration
     opt_df["dte"] = (opt_df["expiry date"] - opt_df["trade date"]).dt.days
     opt_df["T"] = opt_df["dte"] / DAYS_PER_YEAR
 
-    print("Identifying standard monthly contracts...")
+    # Identify standard monthly contracts
     is_friday = opt_df["expiry date"].dt.weekday == 4
     is_third_week = (opt_df["expiry date"].dt.day >= 15) & (
         opt_df["expiry date"].dt.day <= 21
@@ -204,15 +210,16 @@ def apply_underlying_price_at_expiry(
     opt_df: pd.DataFrame
         Options data with Sf label included.
     """
-    print("Identifying SPX CLOSE at expiry date...")
+
+    # Identify SPX CLOSE at expiry date
     opt_df = (
         opt_df.set_index("expiry date")
         .join(spx_data["close"].rename("Sf"), how="inner", lsuffix="", rsuffix="_s")
         .reset_index(drop=False)
     )  # Transform back to integer index for next step...
 
+    # Apply SPX OPEN for standard (monthly, AM-settlement) options
     # Need to operate on integer index; datetime index takes too long to slice
-    print("Applying SPX OPEN for standard (monthly, AM-settlement) options...")
     standard_idx = opt_df[opt_df["standard"]].index
     opt_df.loc[standard_idx, "Sf"] = (
         opt_df.set_index("expiry date")
@@ -230,9 +237,13 @@ def apply_underlying_price_at_expiry(
 
 
 def compute_detrended_sf(
-    market_df: pd.DataFrame, trade_date: str, expiry_date: str, am_settlement: bool
+    market_df: pd.DataFrame,
+    trade_date: str,
+    expiry_date: str,
+    am_settlement: bool,
+    rf: Optional[float],
 ) -> float:
-    """Computes the final price (Sf) of the undelrying after detrending it.
+    """Computes the final price (Sf) of the underlying after detrending it.
     Detrending involves the following steps:
 
     PRECOMPUTED IN MARKET_DF
@@ -241,7 +252,9 @@ def compute_detrended_sf(
         (window with anchored left boundary and rolling right boundary) that accounts
         for all available historical data.
     (3) Subtract the historical mean log-return from the daily log-return, producing
-        the detrended log-return (lr_detrended).
+        the detrended log-return (lr_detrended). If rf is provided, add it back in to
+        "center" the data around the risk-free rate, which amounts to detrending by
+        subtracting (lr_mean_historical - rf).
 
     Returns
     -------
@@ -250,7 +263,14 @@ def compute_detrended_sf(
         log-return trend removed.
     """
     x = market_df.loc[trade_date:expiry_date]  # type: ignore[misc]
-    lr_detrended = x["lr_detrended"].values
+
+    if rf is None:
+        rf = 0.0
+
+    # We ADD rf because lr_detrended = lr - lr_mean_historical, and we want
+    # lr_detrended = lr - (lr_mean_historial - rf). This causes the sign of rf to
+    # become positive.
+    lr_detrended = x["lr_detrended"].values + rf
 
     # First LR is from earlier period -> set to zero.
     lr_detrended[0] = 0
@@ -265,8 +285,54 @@ def compute_detrended_sf(
     return sf_detrended
 
 
+def detrend_returns(
+    opt_df: pd.DataFrame, spx_df: pd.DataFrame, rf_curve_obj: RiskFreeYield
+) -> pd.DataFrame:
+
+    date_pairs = opt_df[["trade date", "expiry date", "standard"]].drop_duplicates()
+
+    for tup in list(date_pairs.itertuples()):
+        trade_date = tup[1]
+        expiry_date = tup[2]
+        am_settlement = tup[3]
+
+        ytm_offset = pd.Timedelta(hours=0)
+        if am_settlement:
+            ytm_offset = pd.Timedelta(hours=6.5)
+        ytm = pd.to_datetime(expiry_date) - pd.to_datetime(trade_date) - ytm_offset
+        rf = rf_curve_obj(date=trade_date, ytm=ytm)
+
+        sf_detrended = compute_detrended_sf(
+            market_df=spx_df,
+            trade_date=trade_date,
+            expiry_date=expiry_date,
+            am_settlement=am_settlement,
+            rf=None,
+        )
+
+        sf_centered = compute_detrended_sf(
+            market_df=spx_df,
+            trade_date=trade_date,
+            expiry_date=expiry_date,
+            am_settlement=am_settlement,
+            rf=rf,
+        )
+
+        idx = opt_df[
+            (opt_df["trade date"] == trade_date)
+            & (opt_df["expiry date"] == expiry_date)
+            & (opt_df["standard"] == am_settlement)
+        ].index
+
+        opt_df.loc[idx, "Sf_detrended"] = sf_detrended
+        opt_df.loc[idx, "Sf_centered"] = sf_centered
+
+    return opt_df
+
+
 def apply_underlying_price_and_yield_at_entry(
-    opt_df: pd.DataFrame, spx_data: pd.DataFrame
+    opt_df: pd.DataFrame,
+    spx_data: pd.DataFrame,
 ) -> pd.DataFrame:
     """Applies the underlying price and dividend yield at 'trade date'.
     Note: For some reason, after reindexing on 'trade date' for the purposes of
@@ -280,13 +346,14 @@ def apply_underlying_price_and_yield_at_entry(
         Options data with S0 (initial SPX price) and q (annualized dividend yield)
         labels included.
     """
-    print("Identifying SPX CLOSE at trade date...")
+    # Identify SPX CLOSE at trade date
     opt_df = opt_df.set_index("trade date").join(
         spx_data["close"].rename("S0"), how="left", lsuffix="", rsuffix="_s"
     )
+
+    # Align S&P 500 dividend yield
     # Not sure why 'trade date' is special, but it requires renaming
     # from 'index' after joining with spx_data.
-    print("Aligning S&P 500 dividend yield...")
     opt_df = (
         opt_df.join(spx_data["q"], how="left", lsuffix="", rsuffix="_s")
         .reset_index(drop=False)
@@ -306,7 +373,6 @@ def apply_risk_free_rate(opt_df: pd.DataFrame, rf_curve: RiskFreeYield) -> pd.Da
     opt_df: pd.DataFrame
         Options data with rf (risk-free rate) included.
     """
-    print("Computing risk-free rates...")
     for trade_date in opt_df["trade date"].unique():
         idx = opt_df[opt_df["trade date"] == trade_date].index
         opt_df.loc[idx, "rf"] = (
@@ -328,7 +394,6 @@ def process_call_options(opt_df: pd.DataFrame) -> pd.DataFrame:
     call_df: pd.DataFrame
         Call options data, sorted by expiry date and trade date.
     """
-    print("Processing Call ITM conditions...")
     call_df = opt_df[opt_df["call/put"] == "c"].reset_index(drop=True)
     call_df["M0"] = call_df["S0"] / call_df["strike"] - 1
     call_df["Mf"] = np.maximum(0.0, (call_df["Sf"] / call_df["strike"]) - 1)
@@ -354,7 +419,6 @@ def process_put_options(opt_df: pd.DataFrame) -> pd.DataFrame:
     put_df: pd.DataFrame
         Put options data, sorted by expiry date and trade date.
     """
-    print("Processing Put ITM conditions...")
     put_df = opt_df[opt_df["call/put"] == "p"].reset_index(drop=True)
     put_df["M0"] = 1 - put_df["S0"] / put_df["strike"]
     put_df["Mf"] = np.maximum(0.0, 1 - (put_df["Sf"] / put_df["strike"]))
@@ -374,6 +438,7 @@ def compute_options_greeks(
     xtol: float = 1e-6,
     max_iter: int = 100,
     use_shimko: bool = False,
+    worker_id: int = 0,
 ) -> pd.DataFrame:
     """Computes sigma (implied volatility), delta, theta, gamma, rho, and vega. Has
     'use_shimko' flag to compute using Shimko's (1993) method. If Shimko's method is
@@ -394,7 +459,9 @@ def compute_options_greeks(
         msg_insert = " via Shimko's method"
 
     for i in tqdm(
-        range(opt_df.shape[0]), desc=f"Computing options Greeks{msg_insert}..."
+        range(opt_df.shape[0]),
+        desc=f"Computing options Greeks{msg_insert}...",
+        position=worker_id,
     ):
         row = opt_df.iloc[i]
 
@@ -505,9 +572,7 @@ def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.Data
         + new_cols
     )
 
-    for trade_date in tqdm(
-        ladder["trade date"].unique(), desc="Computing rf and q via Shimko's method"
-    ):
+    for trade_date in ladder["trade date"].unique():
         tmp1 = ladder[ladder["trade date"] == trade_date]
         for dte in tmp1["dte"].unique():
             tmp2 = tmp1[tmp1["dte"] == dte]
@@ -601,17 +666,64 @@ def rebuild_hdf5(fn_stem: str = "options_rebuilt", complevel: int = 9) -> None:
     print("Processing complete!")
 
 
-if __name__ == "__main__":
+def preprocess_csv_pipeline(
+    data_year_str: str,
+    spx_ohlc_df: pd.DataFrame,
+    rf_curve_obj: RiskFreeYield,
+    column_names: list[str],
+    options_data_dir: str,
+    wid: int = 0,
+) -> Path:
     start = time.perf_counter()
 
-    trg_path_hdf5 = TRG_OPT_DF_DIR / "options.hdf5"
-
+    # Silence common warnings that do not impede operation
     warnings.filterwarnings("ignore", message="Derivative was zero")
     warnings.filterwarnings(
         "ignore", message="divide by zero encountered in scalar divide"
     )
     warnings.filterwarnings("ignore", message="invalid value encountered in log")
 
+    print(f"Processing year {data_year_str}...")
+    opt_fn_list = sorted(glob.glob(options_data_dir + f"/SPX/*_{data_year_str}_*"))
+
+    opt_df = load_concatenate_options_files(opt_fn_list=opt_fn_list, cols=column_names)
+    opt_df = compute_contract_durations_and_types(opt_df=opt_df)
+    opt_df = apply_underlying_price_at_expiry(opt_df=opt_df, spx_data=spx_ohlc_df)
+    opt_df = apply_underlying_price_and_yield_at_entry(
+        opt_df=opt_df, spx_data=spx_ohlc_df
+    )
+    opt_df = apply_risk_free_rate(opt_df=opt_df, rf_curve=rf_curve_obj)
+
+    call_df = process_call_options(opt_df=opt_df)
+    put_df = process_put_options(opt_df=opt_df)
+
+    # Apply Shimko's method for calculating rf and q
+    opt_df = apply_shimkos_method(call_df=call_df, put_df=put_df)
+
+    # Compute Greeks using Shiller/FRED assumptions
+    opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=False, worker_id=wid)
+
+    # Compute Greeks using Shimko assumptions
+    opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=True, worker_id=wid)
+
+    # Compute detrended and centered final underlying prices
+    opt_df = detrend_returns(opt_df=opt_df, spx_df=spx_df, rf_curve_obj=rf_curve_obj)
+
+    # Save to disk
+    trg_path_csv = TRG_OPT_DF_DIR / (data_year_str + ".csv")
+    opt_df.to_csv(trg_path_csv, index=False)
+
+    stop = time.perf_counter()
+    print(
+        f"Processed data from year {data_year_str} in {(stop - start) / 60:.2f} "
+        f"minutes!"
+    )
+    return trg_path_csv
+
+
+if __name__ == "__main__":
+    print("Initiating...")
+    trg_path_hdf5 = TRG_OPT_DF_DIR / "options.hdf5"
     spx_df = get_index_data()
     rf_curve = RiskFreeYield()
 
@@ -626,42 +738,34 @@ if __name__ == "__main__":
     if options_dir is None:
         raise ValueError("OPTIONS_DIR environment variable must be set")
     all_opt_fn_list = sorted(glob.glob(options_dir + "/SPX/*"))
-    data_years = pd.Series([c.split("_")[1] for c in all_opt_fn_list]).unique()
+    data_years = list(pd.Series([c.split("_")[1] for c in all_opt_fn_list]).unique())[
+        :2
+    ]
 
-    for data_year in data_years:
-        print(f"Processing Year: {data_year}")
-        opt_fn_list = sorted(glob.glob(options_dir + f"/SPX/*_{data_year}_*"))
+    pipeline = partial(
+        preprocess_csv_pipeline,
+        spx_ohlc_df=spx_df,
+        rf_curve_obj=rf_curve,
+        column_names=cols,
+        options_data_dir=options_dir,
+    )
+    # Parallelize preprocessing pipeline
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as pool:
+        futures = [
+            pool.submit(pipeline, data_year, wid=wid)
+            for wid, data_year in enumerate(data_years)
+        ]
+        csv_list = [f.result() for f in futures]
 
-        opt_df = load_concatenate_options_files(opt_fn_list=opt_fn_list, cols=cols)
-        opt_df = compute_contract_durations_and_types(opt_df=opt_df)
-        opt_df = apply_underlying_price_at_expiry(opt_df=opt_df, spx_data=spx_df)
-        opt_df = apply_underlying_price_and_yield_at_entry(
-            opt_df=opt_df, spx_data=spx_df
-        )
-        opt_df = apply_risk_free_rate(opt_df=opt_df, rf_curve=rf_curve)
-
-        call_df = process_call_options(opt_df=opt_df)
-        put_df = process_put_options(opt_df=opt_df)
-
-        # Apply Shimko's method for calculating rf and q
-        opt_df = apply_shimkos_method(call_df=call_df, put_df=put_df)
-
-        # Compute Greeks using Shiller/FRED assumptions
-        opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=False)
-
-        # Compute Greeks using Shimko assumptions
-        opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=True)
-
-        print("Saving to CSV...")
-        trg_path_csv = TRG_OPT_DF_DIR / (data_year + ".csv")
-        opt_df.to_csv(trg_path_csv, index=False)
+    print("Finished parallel execution!")
+    print("*" * 50)
+    print("Aggregating CSV files...")
+    # Aggregate CSV files into single HDF5 file
+    for csv_fn in csv_list:
+        options_df = pd.read_csv(csv_fn)
 
         # Append columns to HDF5
-        save_to_hdf5(df=opt_df, trg_path=trg_path_hdf5)
-
-        stop = time.perf_counter()
-        print(f"Processing time elapsed: {(stop - start) / 60:.2f} minutes")
-        print("*" * 50)
+        save_to_hdf5(df=options_df, trg_path=trg_path_hdf5)
 
     print("*" * 50)
     print("Process Complete!")
