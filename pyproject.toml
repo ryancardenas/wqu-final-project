@@ -18,6 +18,7 @@ strict = true
 
 [tool.setuptools.packages.find]
 where = ["src"]
+namespaces = true
 
 [tool.setuptools.package-data]
-"data" = ["data/*.csv"]
+data = ["*.csv"]

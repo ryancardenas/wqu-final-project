@@ -33,7 +33,8 @@ load_dotenv()  # Load our secrets from the .env file
 
 DAYS_PER_YEAR = 365
 NUM_PROCESSES = 8
-TRG_OPT_DF_DIR = Path("./src/data/opt_df")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TRG_OPT_DF_DIR = PROJECT_ROOT / "data"
 
 
 def get_shiller_dividend_yield() -> pd.DataFrame:
@@ -46,7 +47,7 @@ def get_shiller_dividend_yield() -> pd.DataFrame:
     shiller: pd.DataFrame
         Annualized dividend yields, interpolated by Shiller to monthly intervals.
     """
-    shiller_fn = Path("./src/data/ie_data.xls")
+    shiller_fn = TRG_OPT_DF_DIR / "ie_data.xls"
     shiller = pd.read_excel(shiller_fn, skiprows=7, sheet_name="Data", dtype=str)[
         ["Date", "P", "D"]
     ].iloc[:-1]
@@ -87,7 +88,7 @@ def get_index_data() -> pd.DataFrame:
         LR-equivalents for SPX.
     """
     # Import SPX historical prices
-    yf_spx_fn = Path("./src/data/yf_spx.csv")
+    yf_spx_fn = TRG_OPT_DF_DIR / "yf_spx.csv"
     spx = pd.read_csv(yf_spx_fn).set_index("datetime")[["open", "close"]]
     spx.index = pd.to_datetime(spx.index)
 
