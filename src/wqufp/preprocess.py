@@ -441,7 +441,7 @@ def parallelize_options_greeks(
         Options data containing computed Greeks.
     """
     opt_df_chunks = np.array_split(opt_df, NUM_PROCESSES)
-    args = [(opt_df_chunks[i], i) for i in range(opt_df_chunks.shape[0])]
+    args = [(opt_df_chunks[i], i) for i in range(len(opt_df_chunks))]
     process_chunk = partial(compute_options_greeks, use_shimko=use_shimko)
     with Pool(NUM_PROCESSES) as pool:
         processed_chunks = pool.map(process_chunk, args)
@@ -657,7 +657,7 @@ def parallelize_detrending_of_sf(
     """
     date_tuples = opt_df[["trade date", "expiry date", "standard"]].drop_duplicates()
     date_chunks = np.array_split(date_tuples, NUM_PROCESSES)
-    args = [(date_chunks[i], i) for i in range(date_chunks.shape[0])]
+    args = [(date_chunks[i], i) for i in range(len(date_chunks))]
 
     process_chunk = partial(
         detrend_returns, opt_df=opt_df, spx_data=spx_data, rf_curve_obj=rf_curve_obj
