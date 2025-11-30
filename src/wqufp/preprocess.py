@@ -14,7 +14,10 @@ import glob
 import os
 import time
 import warnings
+from functools import partial
+from multiprocessing import Pool
 from pathlib import Path
+from typing import Optional
 
 import h5py
 import numpy as np
@@ -29,6 +32,7 @@ from wqufp.yield_curve import RiskFreeYield
 load_dotenv()  # Load our secrets from the .env file
 
 DAYS_PER_YEAR = 365
+NUM_PROCESSES = 8
 TRG_OPT_DF_DIR = Path("./src/data/opt_df")
 
 
@@ -229,42 +233,6 @@ def apply_underlying_price_at_expiry(
     return opt_df
 
 
-def compute_detrended_sf(
-    market_df: pd.DataFrame, trade_date: str, expiry_date: str, am_settlement: bool
-) -> float:
-    """Computes the final price (Sf) of the undelrying after detrending it.
-    Detrending involves the following steps:
-
-    PRECOMPUTED IN MARKET_DF
-    (1) Convert Sf series to log-returns (lr).
-    (2) Compute historical mean log-return (lr_mean_historical) on expanding basis
-        (window with anchored left boundary and rolling right boundary) that accounts
-        for all available historical data.
-    (3) Subtract the historical mean log-return from the daily log-return, producing
-        the detrended log-return (lr_detrended).
-
-    Returns
-    -------
-    sf_detrended: float
-        The reconstructed settlement price of the underlying, with the historical
-        log-return trend removed.
-    """
-    x = market_df.loc[trade_date:expiry_date]  # type: ignore[misc]
-    lr_detrended = x["lr_detrended"].values
-
-    # First LR is from earlier period -> set to zero.
-    lr_detrended[0] = 0
-
-    # Handle last log-return from CLOSE(T-1) to OPEN(T)
-    if am_settlement:
-        lr_detrended[-1] = x["onlr_detrended"].values[-1]
-
-    # Accumulate de-trended log-returns and apply final value
-    lr_final = lr_detrended.sum()
-    sf_detrended: float = x.loc[trade_date, "close"] * np.exp(lr_final)
-    return sf_detrended
-
-
 def apply_underlying_price_and_yield_at_entry(
     opt_df: pd.DataFrame, spx_data: pd.DataFrame
 ) -> pd.DataFrame:
@@ -369,6 +337,7 @@ def process_put_options(opt_df: pd.DataFrame) -> pd.DataFrame:
 
 def compute_options_greeks(
     opt_df: pd.DataFrame,
+    worker_id: int,
     min_vol: float = 0.001,
     max_vol: float = 2.5,
     xtol: float = 1e-6,
@@ -394,7 +363,9 @@ def compute_options_greeks(
         msg_insert = " via Shimko's method"
 
     for i in tqdm(
-        range(opt_df.shape[0]), desc=f"Computing options Greeks{msg_insert}..."
+        range(opt_df.shape[0]),
+        desc=f"Computing options Greeks{msg_insert}...",
+        position=worker_id,
     ):
         row = opt_df.iloc[i]
 
@@ -454,6 +425,28 @@ def compute_options_greeks(
         opt_df.loc[i, "pitm" + out_suffix] = p_itm
 
     return opt_df
+
+
+def parallelize_options_greeks(
+    opt_df: pd.DataFrame,
+    use_shimko: bool = False,
+) -> pd.DataFrame:
+    """Splits opt_df into NUM_PROCESS chunks and feeds them in parallel to
+    compute_options_greeks() via a multiprocessing Pool.
+
+    Returns
+    -------
+    opt_df: pd.DataFrame
+        Options data containing computed Greeks.
+    """
+    opt_df_chunks = np.array_split(opt_df, NUM_PROCESSES)
+    args = [(opt_df_chunks[i], i) for i in range(opt_df_chunks.shape[0])]
+    process_chunk = partial(compute_options_greeks, use_shimko=use_shimko)
+    with Pool(NUM_PROCESSES) as pool:
+        processed_chunks = pool.map(process_chunk, args)
+
+    result = pd.concat(processed_chunks)
+    return result
 
 
 def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.DataFrame:
@@ -541,6 +534,109 @@ def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.Data
     result = pd.concat([calls, puts], ignore_index=True)
 
     return result
+
+
+def compute_detrended_sf(
+    market_df: pd.DataFrame,
+    trade_date: str,
+    expiry_date: str,
+    am_settlement: bool,
+    rf: Optional[float],
+) -> float:
+    """Computes the final price (Sf) of the underlying after detrending it.
+    Detrending involves the following steps:
+
+    PRECOMPUTED IN MARKET_DF
+    (1) Convert Sf series to log-returns (lr).
+    (2) Compute historical mean log-return (lr_mean_historical) on expanding basis
+        (window with anchored left boundary and rolling right boundary) that accounts
+        for all available historical data.
+    (3) Subtract the historical mean log-return from the daily log-return, producing
+        the detrended log-return (lr_detrended). If rf is provided, add it back in to
+        "center" the data around the risk-free rate, which amounts to detrending by
+        subtracting (lr_mean_historical - rf).
+
+    Returns
+    -------
+    sf_detrended: float
+        The reconstructed settlement price of the underlying, with the historical
+        log-return trend removed.
+    """
+    x = market_df.loc[trade_date:expiry_date]  # type: ignore[misc]
+
+    if rf is None:
+        rf = 0.0
+
+    # We ADD rf because lr_detrended = lr - lr_mean_historical, and we want
+    # lr_detrended = lr - (lr_mean_historial - rf). This causes the sign of rf to
+    # become positive.
+    lr_detrended = x["lr_detrended"].values + rf
+
+    # First LR is from earlier period -> set to zero.
+    lr_detrended[0] = 0
+
+    # Handle last log-return from CLOSE(T-1) to OPEN(T)
+    if am_settlement:
+        lr_detrended[-1] = x["onlr_detrended"].values[-1]
+
+    # Accumulate de-trended log-returns and apply final value
+    lr_final = lr_detrended.sum()
+    sf_detrended: float = x.loc[trade_date, "close"] * np.exp(lr_final)
+    return sf_detrended
+
+
+def detrend_returns(
+    opt_df: pd.DataFrame, spx_data: pd.DataFrame, rf_curve_obj: RiskFreeYield
+) -> pd.DataFrame:
+    """Efficiently the computation of detrended/centered returns by chunking opt_df
+    according to (trade date, expiry date, standard) and applying the
+    detrended/centered return to the entire chunk.
+
+    Returns
+    -------
+    opt_df: pd.DataFrame
+        Options data with detrended/centered return data included.
+    """
+
+    date_pairs = opt_df[["trade date", "expiry date", "standard"]].drop_duplicates()
+
+    for tup in list(date_pairs.itertuples()):
+        trade_date = tup[1]
+        expiry_date = tup[2]
+        am_settlement = tup[3]
+
+        ytm_offset = pd.Timedelta(hours=0)
+        if am_settlement:
+            ytm_offset = pd.Timedelta(hours=6.5)
+        ytm = pd.to_datetime(expiry_date) - pd.to_datetime(trade_date) - ytm_offset
+        rf = rf_curve_obj(date=trade_date, ytm=ytm)
+
+        sf_detrended = compute_detrended_sf(
+            market_df=spx_data,
+            trade_date=trade_date,
+            expiry_date=expiry_date,
+            am_settlement=am_settlement,
+            rf=None,
+        )
+
+        sf_centered = compute_detrended_sf(
+            market_df=spx_data,
+            trade_date=trade_date,
+            expiry_date=expiry_date,
+            am_settlement=am_settlement,
+            rf=rf,
+        )
+
+        idx = opt_df[
+            (opt_df["trade date"] == trade_date)
+            & (opt_df["expiry date"] == expiry_date)
+            & (opt_df["standard"] == am_settlement)
+        ].index
+
+        opt_df.loc[idx, "Sf_detrended"] = sf_detrended
+        opt_df.loc[idx, "Sf_centered"] = sf_centered
+
+    return opt_df
 
 
 def save_to_hdf5(df: pd.DataFrame, trg_path: Path | str) -> None:
@@ -647,10 +743,13 @@ if __name__ == "__main__":
         opt_df = apply_shimkos_method(call_df=call_df, put_df=put_df)
 
         # Compute Greeks using Shiller/FRED assumptions
-        opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=False)
+        opt_df = parallelize_options_greeks(opt_df=opt_df, use_shimko=False)
 
         # Compute Greeks using Shimko assumptions
-        opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=True)
+        opt_df = parallelize_options_greeks(opt_df=opt_df, use_shimko=True)
+
+        # Compute detrended and centered returns under FRED assumptions
+        opt_df = detrend_returns(opt_df=opt_df, spx_data=spx_df, rf_curve_obj=rf_curve)
 
         print("Saving to CSV...")
         trg_path_csv = TRG_OPT_DF_DIR / (data_year + ".csv")
