@@ -337,8 +337,7 @@ def process_put_options(opt_df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_options_greeks(
-    opt_df: pd.DataFrame,
-    worker_id: int,
+    arg: tuple[pd.DataFrame, int],
     min_vol: float = 0.001,
     max_vol: float = 2.5,
     xtol: float = 1e-6,
@@ -355,6 +354,7 @@ def compute_options_greeks(
     opt_df: pd.DataFrame
         Options data with Greeks included.
     """
+    opt_df, worker_id = arg
     in_suffix = ""
     out_suffix = "_"
     msg_insert = ""
@@ -587,8 +587,7 @@ def compute_detrended_sf(
 
 
 def detrend_returns(
-    date_tuples: pd.DataFrame,
-    worker_id: int,
+    arg: tuple[pd.DataFrame, int],
     opt_df: pd.DataFrame,
     spx_data: pd.DataFrame,
     rf_curve_obj: RiskFreeYield,
@@ -602,6 +601,7 @@ def detrend_returns(
     opt_df: pd.DataFrame
         Options data with detrended/centered return data included.
     """
+    date_tuples, worker_id = arg
 
     for tup in tqdm(
         list(date_tuples.itertuples()), desc="Detrending returns...", position=worker_id
