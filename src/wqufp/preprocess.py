@@ -32,7 +32,7 @@ from wqufp.yield_curve import RiskFreeYield
 load_dotenv()  # Load our secrets from the .env file
 
 DAYS_PER_YEAR = 365
-NUM_PROCESSES = 8
+NUM_PROCESSES = 6
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TRG_OPT_DF_DIR = PROJECT_ROOT / "data"
 
