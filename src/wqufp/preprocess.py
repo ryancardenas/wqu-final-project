@@ -586,10 +586,14 @@ def compute_detrended_sf(
 
 
 def detrend_returns(
-    opt_df: pd.DataFrame, spx_data: pd.DataFrame, rf_curve_obj: RiskFreeYield
+    date_tuples: pd.DataFrame,
+    worker_id: int,
+    opt_df: pd.DataFrame,
+    spx_data: pd.DataFrame,
+    rf_curve_obj: RiskFreeYield,
 ) -> pd.DataFrame:
-    """Efficiently the computation of detrended/centered returns by chunking opt_df
-    according to (trade date, expiry date, standard) and applying the
+    """Efficiently manages the computation of detrended/centered returns by chunking
+    opt_df according to each (trade date, expiry date, standard) and applying the
     detrended/centered return to the entire chunk.
 
     Returns
@@ -598,9 +602,9 @@ def detrend_returns(
         Options data with detrended/centered return data included.
     """
 
-    date_pairs = opt_df[["trade date", "expiry date", "standard"]].drop_duplicates()
-
-    for tup in list(date_pairs.itertuples()):
+    for tup in tqdm(
+        list(date_tuples.itertuples()), desc="Detrending returns...", position=worker_id
+    ):
         trade_date = tup[1]
         expiry_date = tup[2]
         am_settlement = tup[3]
@@ -637,6 +641,31 @@ def detrend_returns(
         opt_df.loc[idx, "Sf_centered"] = sf_centered
 
     return opt_df
+
+
+def parallelize_detrending_of_sf(
+    opt_df: pd.DataFrame, spx_data: pd.DataFrame, rf_curve_obj: RiskFreeYield
+) -> pd.DataFrame:
+    """Splits date_pairs into NUM_PROCESS chunks and feeds them in parallel to
+    compute_detrended_sf() via a multiprocessing Pool.
+
+    Returns
+    -------
+    opt_df: pd.DataFrame
+        Options data containing detrended/centered Sf.
+    """
+    date_tuples = opt_df[["trade date", "expiry date", "standard"]].drop_duplicates()
+    date_chunks = np.array_split(date_tuples, NUM_PROCESSES)
+    args = [(date_chunks[i], i) for i in range(date_chunks.shape[0])]
+
+    process_chunk = partial(
+        detrend_returns, opt_df=opt_df, spx_data=spx_data, rf_curve_obj=rf_curve_obj
+    )
+    with Pool(NUM_PROCESSES) as pool:
+        processed_chunks = pool.map(process_chunk, args)
+
+    result = pd.concat(processed_chunks)
+    return result
 
 
 def save_to_hdf5(df: pd.DataFrame, trg_path: Path | str) -> None:
@@ -749,7 +778,9 @@ if __name__ == "__main__":
         opt_df = parallelize_options_greeks(opt_df=opt_df, use_shimko=True)
 
         # Compute detrended and centered returns under FRED assumptions
-        opt_df = detrend_returns(opt_df=opt_df, spx_data=spx_df, rf_curve_obj=rf_curve)
+        opt_df = parallelize_detrending_of_sf(
+            opt_df=opt_df, spx_data=spx_df, rf_curve_obj=rf_curve
+        )
 
         print("Saving to CSV...")
         trg_path_csv = TRG_OPT_DF_DIR / (data_year + ".csv")
