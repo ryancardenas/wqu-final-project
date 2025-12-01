@@ -15,6 +15,7 @@ import os
 import time
 import warnings
 from pathlib import Path
+from typing import Optional
 
 import h5py
 import numpy as np
@@ -29,7 +30,8 @@ from wqufp.yield_curve import RiskFreeYield
 load_dotenv()  # Load our secrets from the .env file
 
 DAYS_PER_YEAR = 365
-TRG_OPT_DF_DIR = Path("./src/data/opt_df")
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+TRG_OPT_DF_DIR = PROJECT_ROOT / "data/opt_df"
 
 
 def get_shiller_dividend_yield() -> pd.DataFrame:
@@ -42,7 +44,7 @@ def get_shiller_dividend_yield() -> pd.DataFrame:
     shiller: pd.DataFrame
         Annualized dividend yields, interpolated by Shiller to monthly intervals.
     """
-    shiller_fn = Path("./src/data/ie_data.xls")
+    shiller_fn = PROJECT_ROOT / "data/ie_data.xls"
     shiller = pd.read_excel(shiller_fn, skiprows=7, sheet_name="Data", dtype=str)[
         ["Date", "P", "D"]
     ].iloc[:-1]
@@ -83,7 +85,7 @@ def get_index_data() -> pd.DataFrame:
         LR-equivalents for SPX.
     """
     # Import SPX historical prices
-    yf_spx_fn = Path("./src/data/yf_spx.csv")
+    yf_spx_fn = PROJECT_ROOT / "data/yf_spx.csv"
     spx = pd.read_csv(yf_spx_fn).set_index("datetime")[["open", "close"]]
     spx.index = pd.to_datetime(spx.index)
 
@@ -227,42 +229,6 @@ def apply_underlying_price_at_expiry(
     )
 
     return opt_df
-
-
-def compute_detrended_sf(
-    market_df: pd.DataFrame, trade_date: str, expiry_date: str, am_settlement: bool
-) -> float:
-    """Computes the final price (Sf) of the undelrying after detrending it.
-    Detrending involves the following steps:
-
-    PRECOMPUTED IN MARKET_DF
-    (1) Convert Sf series to log-returns (lr).
-    (2) Compute historical mean log-return (lr_mean_historical) on expanding basis
-        (window with anchored left boundary and rolling right boundary) that accounts
-        for all available historical data.
-    (3) Subtract the historical mean log-return from the daily log-return, producing
-        the detrended log-return (lr_detrended).
-
-    Returns
-    -------
-    sf_detrended: float
-        The reconstructed settlement price of the underlying, with the historical
-        log-return trend removed.
-    """
-    x = market_df.loc[trade_date:expiry_date]  # type: ignore[misc]
-    lr_detrended = x["lr_detrended"].values
-
-    # First LR is from earlier period -> set to zero.
-    lr_detrended[0] = 0
-
-    # Handle last log-return from CLOSE(T-1) to OPEN(T)
-    if am_settlement:
-        lr_detrended[-1] = x["onlr_detrended"].values[-1]
-
-    # Accumulate de-trended log-returns and apply final value
-    lr_final = lr_detrended.sum()
-    sf_detrended: float = x.loc[trade_date, "close"] * np.exp(lr_final)
-    return sf_detrended
 
 
 def apply_underlying_price_and_yield_at_entry(
@@ -543,6 +509,120 @@ def apply_shimkos_method(call_df: pd.DataFrame, put_df: pd.DataFrame) -> pd.Data
     return result
 
 
+def compute_detrended_sf(
+    market_df: pd.DataFrame,
+    trade_date: str,
+    expiry_date: str,
+    am_settlement: bool,
+    rf: Optional[float],
+) -> float:
+    """Computes the final price (Sf) of the underlying after detrending it.
+    Detrending involves the following steps:
+
+    PRECOMPUTED IN MARKET_DF
+    (1) Convert Sf series to log-returns (lr).
+    (2) Compute historical mean log-return (lr_mean_historical) on expanding basis
+        (window with anchored left boundary and rolling right boundary) that accounts
+        for all available historical data.
+    (3) Subtract the historical mean log-return from the daily log-return, producing
+        the detrended log-return (lr_detrended). If rf is provided, add it back in to
+        "center" the data around the risk-free rate, which amounts to detrending by
+        subtracting (lr_mean_historical - rf).
+
+    Returns
+    -------
+    sf_detrended: float
+        The reconstructed settlement price of the underlying, with the historical
+        log-return trend removed.
+    """
+    x = market_df.loc[trade_date:expiry_date]  # type: ignore[misc]
+
+    if rf is None:
+        rf = 0.0
+
+    # We ADD rf because lr_detrended = lr - lr_mean_historical, and we want
+    # lr_detrended = lr - (lr_mean_historial - rf). This causes the sign of rf to
+    # become positive.
+    lr_detrended = x["lr_detrended"].values + rf
+
+    # First LR is from earlier period -> set to zero.
+    lr_detrended[0] = 0
+
+    # Handle last log-return from CLOSE(T-1) to OPEN(T)
+    if am_settlement:
+        lr_detrended[-1] = x["onlr_detrended"].values[-1]
+
+    # Accumulate de-trended log-returns and apply final value
+    lr_final = lr_detrended.sum()
+    sf_detrended: float = x.loc[trade_date, "close"] * np.exp(lr_final)
+    return sf_detrended
+
+
+def detrend_returns(
+    opt_df: pd.DataFrame,
+    spx_data: pd.DataFrame,
+) -> pd.DataFrame:
+    """Efficiently manages the computation of detrended/centered returns by chunking
+    opt_df according to each (trade date, expiry date, standard) and applying the
+    detrended/centered return to the entire chunk.
+
+    Returns
+    -------
+    opt_df: pd.DataFrame
+        Options data with detrended/centered return data included.
+    """
+    date_tuples = opt_df[["trade date", "expiry date", "standard"]].drop_duplicates()
+
+    for tup in tqdm(list(date_tuples.itertuples()), desc="Detrending returns..."):
+        trade_date = tup[1]
+        expiry_date = tup[2]
+        am_settlement = tup[3]
+
+        row = opt_df[
+            (opt_df["trade date"] == trade_date)
+            & (opt_df["expiry date"] == expiry_date)
+            & (opt_df["standard"] == am_settlement)
+        ].iloc[0]
+        rf = row["rf"]
+        rf_shimko = row["rf_shimko"]
+
+        sf_detrended = compute_detrended_sf(
+            market_df=spx_data,
+            trade_date=trade_date,
+            expiry_date=expiry_date,
+            am_settlement=am_settlement,
+            rf=None,
+        )
+
+        sf_centered = compute_detrended_sf(
+            market_df=spx_data,
+            trade_date=trade_date,
+            expiry_date=expiry_date,
+            am_settlement=am_settlement,
+            rf=rf,
+        )
+
+        sf_centered_shimko = compute_detrended_sf(
+            market_df=spx_data,
+            trade_date=trade_date,
+            expiry_date=expiry_date,
+            am_settlement=am_settlement,
+            rf=rf_shimko,
+        )
+
+        idx = opt_df[
+            (opt_df["trade date"] == trade_date)
+            & (opt_df["expiry date"] == expiry_date)
+            & (opt_df["standard"] == am_settlement)
+        ].index
+
+        opt_df.loc[idx, "Sf_detrended"] = sf_detrended
+        opt_df.loc[idx, "Sf_centered"] = sf_centered
+        opt_df.loc[idx, "Sf_centered_shimko"] = sf_centered_shimko
+
+    return opt_df
+
+
 def save_to_hdf5(df: pd.DataFrame, trg_path: Path | str) -> None:
     """Append df to HDF5 file, converting datetime columns to integers (seconds since
     epoch).
@@ -651,6 +731,9 @@ if __name__ == "__main__":
 
         # Compute Greeks using Shimko assumptions
         opt_df = compute_options_greeks(opt_df=opt_df, use_shimko=True)
+
+        # Compute detrended Sf
+        opt_df = detrend_returns(opt_df=opt_df, spx_data=spx_df)
 
         print("Saving to CSV...")
         trg_path_csv = TRG_OPT_DF_DIR / (data_year + ".csv")
