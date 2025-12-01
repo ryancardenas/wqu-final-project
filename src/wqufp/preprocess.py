@@ -578,12 +578,6 @@ def detrend_returns(
         expiry_date = tup[2]
         am_settlement = tup[3]
 
-        # ytm_offset = pd.Timedelta(hours=0)
-        # if am_settlement:
-        #     ytm_offset = pd.Timedelta(hours=6.5)
-        # ytm = pd.to_datetime(expiry_date) - pd.to_datetime(trade_date) - ytm_offset
-        # rf = rf_curve_obj(date=trade_date, ytm=ytm)
-
         row = opt_df[
             (opt_df["trade date"] == trade_date)
             & (opt_df["expiry date"] == expiry_date)
