@@ -1,13 +1,23 @@
+[project]
+name = "wqufp"
+version = "0.1.0"
+
 [tool.black]
 line-length = 88
 
 [tool.isort]
 profile = "black"
 
-[tool.flake8]
-max-inline-length = 88
+[tool.flake8]  # max-line-length not working with pyproject.toml as of 2025-11-12
+max-line-length = 88
 extend-ignore = ["E203", "W503"]  # Ignore whitespace before ':' and line break before binary operator
 exclude = [".git", "__pycache__", "build", "dist"] 
 
 [tool.mypy]
 strict = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"data" = ["data/*.csv"]

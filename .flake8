@@ -1,0 +1,4 @@
+# .flake8
+[flake8]
+config = pyproject.toml
+max-line-length = 88

@@ -1,0 +1,1 @@
+Data files contained in this directory are too large to be uploaded to git. Additionally, these files contain non-distributable options data purchased from FirstRate Data.

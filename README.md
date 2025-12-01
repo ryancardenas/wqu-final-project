@@ -4,7 +4,7 @@ Code for our final project of the M.Sc. in Financial Engineering at WorldQuant U
 
 ## Authors
 
-Ryan Cardenas, Qihu Zhang, and Rakotoarimanana Nomenjanahary (Hosea Levi)
+Ryan Cardenas
 
 # Installation
 
