@@ -162,8 +162,8 @@ def load_preprocessed_data() -> pd.DataFrame:
         "S0",
         "Sf",
         "Sf_detrended",
-        "Sf_centered",
-        "Sf_centered_shimko",
+        # "Sf_centered",
+        # "Sf_centered_shimko",
         "ITM",
         "q",
         "rf",
@@ -194,16 +194,16 @@ def load_preprocessed_data() -> pd.DataFrame:
         df["Sf_detrended"] > df["strike"],
         df["Sf_detrended"] < df["strike"],
     )
-    df["ITM_centered"] = np.where(
-        df["call/put"] == "c",
-        df["Sf_centered"] > df["strike"],
-        df["Sf_centered"] < df["strike"],
-    )
-    df["ITM_centered_shimko"] = np.where(
-        df["call/put"] == "c",
-        df["Sf_centered_shimko"] > df["strike"],
-        df["Sf_centered_shimko"] < df["strike"],
-    )
+    # df["ITM_centered"] = np.where(
+    #     df["call/put"] == "c",
+    #     df["Sf_centered"] > df["strike"],
+    #     df["Sf_centered"] < df["strike"],
+    # )
+    # df["ITM_centered_shimko"] = np.where(
+    #     df["call/put"] == "c",
+    #     df["Sf_centered_shimko"] > df["strike"],
+    #     df["Sf_centered_shimko"] < df["strike"],
+    # )
 
     df.dropna(inplace=True)
     print(f"{df.memory_usage().sum() / 1e9:.2f} GB loaded into memory.")
@@ -503,8 +503,11 @@ if __name__ == "__main__":
     # Detrended Sf and ITM
     pipeline(detrend_suffix="_detrended")
 
-    # Centered via FRED/Shiller
-    pipeline(detrend_suffix="_centered")
-
-    # Centered via Shimko
-    pipeline(detrend_suffix="_centered_shimko")
+    # TODO: Bugfix preprocess.compute_detrended_sf() using annualized rf instead of
+    #  daily rf. In the meantime, do not use _centered data variants. See
+    #  commented-out lines in load_preprocessed_data().
+    # # Centered via FRED/Shiller
+    # pipeline(detrend_suffix="_centered")
+    #
+    # # Centered via Shimko
+    # pipeline(detrend_suffix="_centered_shimko")
