@@ -20,8 +20,9 @@ from wqufp.yield_curve import RiskFreeYield
 
 plt.rcParams.update({"font.size": 12})
 
-IMG_PATH = Path("./paper/images")
-HDF5_PATH = Path("./src/data/opt_df/options.hdf5")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+IMG_PATH = PROJECT_ROOT / "paper/images"
+HDF5_PATH = PROJECT_ROOT / "src/data/opt_df/options.hdf5"
 
 
 def generate_treasury_yield_curve_graphs(date: str = "2025-11-01") -> None:
@@ -55,6 +56,7 @@ def generate_treasury_yield_curve_graphs(date: str = "2025-11-01") -> None:
     ax.grid()
     ax.legend()
     plt.savefig(fn)
+    plt.close()
 
     # Now the 0-1 year chart
     ytm = np.linspace(0, 1.01, 1000)
@@ -79,6 +81,7 @@ def generate_treasury_yield_curve_graphs(date: str = "2025-11-01") -> None:
     ax.grid()
     ax.legend()
     plt.savefig(fn2)
+    plt.close()
 
     print("Yield curve graphs saved to disk.")
     print(fn)
@@ -90,7 +93,7 @@ def get_measures(
     q_measure: str,
     contract_type: str = "both",
     prec: int = 2,
-    detrended: bool = False,
+    detrend_suffix: str = "",
 ) -> pd.DataFrame:
     """Generates a dataframe containing information about the computed Q- and
     P-measures.
@@ -111,8 +114,9 @@ def get_measures(
     prec: int
         Precision with which to round Q-measure.
 
-    detrended: bool
-        Flag for using either ITM or ITM_detrended in computing Q-P.
+    detrended: str
+        Flag for using ITM, ITM_detrended, ITM_centered, or ITM_centered_shimko in
+        computing Q-P.
 
     Returns
     -------
@@ -121,17 +125,13 @@ def get_measures(
 
     assert contract_type in ["c", "p", "both"]
 
-    suffix = ""
-    if detrended:
-        suffix = "_detrended"
-
-    cols = ["call/put", q_measure, "ITM" + suffix]
+    cols = ["call/put", q_measure, "ITM" + detrend_suffix]
     if contract_type == "both":
         tmp = dataframe[cols].copy()
     else:
         tmp = dataframe[dataframe["call/put"] == contract_type][cols].copy()
     tmp = (
-        tmp[[q_measure, "ITM" + suffix]]
+        tmp[[q_measure, "ITM" + detrend_suffix]]
         .sort_values(by=q_measure)
         .reset_index(drop=True)
     )
@@ -140,7 +140,7 @@ def get_measures(
 
     result = grp.mean().reset_index()
     result["N"] = grp.count().values
-    result.rename({q_measure: "Q", "ITM" + suffix: "P"}, axis=1, inplace=True)
+    result.rename({q_measure: "Q", "ITM" + detrend_suffix: "P"}, axis=1, inplace=True)
     result["Q-P"] = result["Q"] - result["P"]
     return result
 
@@ -151,7 +151,7 @@ def load_preprocessed_data() -> pd.DataFrame:
     -------
     df: pd.DataFrame
         Dataframe containing preprocessed options data. Includes a just-in-time
-        calculation of ITM_detrended.
+        calculation of ITM_detrended, ITM_centered, and ITM_centered_shimko.
     """
     print("Loading options.hdf5 into memory...")
     date_labels = ["trade date", "expiry date"]
@@ -162,6 +162,8 @@ def load_preprocessed_data() -> pd.DataFrame:
         "S0",
         "Sf",
         "Sf_detrended",
+        "Sf_centered",
+        "Sf_centered_shimko",
         "ITM",
         "q",
         "rf",
@@ -186,11 +188,21 @@ def load_preprocessed_data() -> pd.DataFrame:
             else:
                 df[label] = f[label]
 
-    # Compute ITM condition for detrended Sf
+    # Compute ITM condition for detrended and centered Sf
     df["ITM_detrended"] = np.where(
         df["call/put"] == "c",
         df["Sf_detrended"] > df["strike"],
         df["Sf_detrended"] < df["strike"],
+    )
+    df["ITM_centered"] = np.where(
+        df["call/put"] == "c",
+        df["Sf_centered"] > df["strike"],
+        df["Sf_centered"] < df["strike"],
+    )
+    df["ITM_centered_shimko"] = np.where(
+        df["call/put"] == "c",
+        df["Sf_centered_shimko"] > df["strike"],
+        df["Sf_centered_shimko"] < df["strike"],
     )
 
     df.dropna(inplace=True)
@@ -199,7 +211,7 @@ def load_preprocessed_data() -> pd.DataFrame:
 
 
 def generate_qp_graphs(
-    df: pd.DataFrame, q_measure: str = "pitm_", prec: int = 2, detrended: bool = False
+    df: pd.DataFrame, q_measure: str = "pitm_", prec: int = 2, detrend_suffix: str = ""
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Generates plots of Q-P and N_samples, then saves to disk.
 
@@ -216,9 +228,9 @@ def generate_qp_graphs(
     prec: int, optional
         The precision with which to round all Q-measures.
 
-    detrended: bool, optional
-        Flag for using detrended Sf and ITM. Defaults to False, which uses true
-        historical Sf and ITM instead.
+    detrend_suffix: str
+        Flag for using detrended Sf and ITM. Defaults to true historical Sf and ITM
+        instead.
 
     Returns
     -------
@@ -236,8 +248,12 @@ def generate_qp_graphs(
         raise ValueError(f"{q_measure} has no implemented method")
 
     detrend_label = ""
-    if detrended:
+    if detrend_suffix == "_detrended":
         detrend_label = "Detrended"
+    elif detrend_suffix == "_centered":
+        detrend_label = "Centered (FRED/Shiller)"
+    elif detrend_suffix == "_centered_shimko":
+        detrend_label = "Centered (Shimko)"
 
     print(f"Generating {detrend_label.lower()} graphs...")
 
@@ -251,27 +267,30 @@ def generate_qp_graphs(
         q_measure=q_measure,
         contract_type="both",
         prec=prec,
-        detrended=detrended,
+        detrend_suffix=detrend_suffix,
     )
     calls = get_measures(
         dataframe=df,
         q_measure=q_measure,
         contract_type="c",
         prec=prec,
-        detrended=detrended,
+        detrend_suffix=detrend_suffix,
     )
     puts = get_measures(
         dataframe=df,
         q_measure=q_measure,
         contract_type="p",
         prec=prec,
-        detrended=detrended,
+        detrend_suffix=detrend_suffix,
     )
 
     # Generate graph of Q-P
+    truncated_detrend_label = (
+        detrend_label.lower().replace("/", "_").replace("(", "_").replace(")", "_")
+    )
     fn = (
         IMG_PATH / f"{method.lower().replace('/', '_')}_q_minus_p_"
-        f"{detrend_label.lower()}.png"
+        f"{truncated_detrend_label}.png"
     )
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     ax.set_title(
@@ -306,9 +325,12 @@ def generate_qp_graphs(
     ax.grid()
     ax.legend()
     plt.savefig(fn)
+    plt.close()
 
     # Generate graph of N
-    fn2 = IMG_PATH / f"{method.lower().replace('/', '_')}_n_{detrend_label.lower()}.png"
+    fn2 = (
+        IMG_PATH / f"{method.lower().replace('/', '_')}_n_{truncated_detrend_label}.png"
+    )
     fig, ax = plt.subplots(1, 1, figsize=(12, 6))
     ax.set_title(
         f"Number of {detrend_label} Contracts Sampled at Each Q-Measure"
@@ -325,6 +347,7 @@ def generate_qp_graphs(
     ax.grid()
     ax.legend()
     plt.savefig(fn2)
+    plt.close()
 
     print(f"{method} {detrend_label.lower()} graphs saved to disk.")
     return x, calls, puts
@@ -337,7 +360,7 @@ def generate_method_comparison_graphs(
     x_shimko: pd.DataFrame,
     calls_shimko: pd.DataFrame,
     puts_shimko: pd.DataFrame,
-    detrended: bool = False,
+    detrend_suffix: str = "",
 ) -> None:
     """Generates graphs of Q_Shimko minus Q_FRED_Shiller and saves to disk.
 
@@ -360,6 +383,10 @@ def generate_method_comparison_graphs(
 
     puts_shimko: pd.DataFrame
         Shimko puts-only dataframe from get_measures().
+
+    detrend_suffix: str
+        Flag for using detrended Sf and ITM. Defaults to true historical Sf and ITM
+        instead.
     """
     y_lim = (-0.04, 0.04)  # Set manually
 
@@ -369,14 +396,16 @@ def generate_method_comparison_graphs(
     y_axis_label = "∆(Q-P)"
 
     detrend_label = ""
-    detrend_suffix = ""
-    if detrended:
+    if detrend_suffix == "_detrended":
         detrend_label = " for Detrended Underlying"
-        detrend_suffix = "detrended"
+    elif detrend_suffix == "_centered":
+        detrend_label = " for Underlying Centered via FRED/Shiller"
+    elif detrend_suffix == "_centered_shimko":
+        detrend_label = " for Underlying Centered via Shimko"
 
     print(f"Generating {detrend_suffix} comparison graphs...")
 
-    fn = IMG_PATH / f"shimko_minus_fred_shiller_q_{detrend_suffix}.png"
+    fn = IMG_PATH / f"shimko_minus_fred_shiller_q{detrend_suffix}.png"
 
     fig, axs = plt.subplots(3, 1, figsize=(12, 12))
     fig.suptitle(f"Comparing Shimko (Q-P) Minus FRED/Shiller (Q-P){detrend_label}")
@@ -439,7 +468,27 @@ def generate_method_comparison_graphs(
 
     fig.tight_layout()
     plt.savefig(fn)
+    plt.close()
     print("Comparison graphs saved to disk.")
+
+
+def pipeline(detrend_suffix: str = "") -> None:
+    """Generates all graphs for a given detrend_suffix."""
+    (x, calls, puts) = generate_qp_graphs(
+        df=opt_df, q_measure="pitm_", prec=prec, detrend_suffix=detrend_suffix
+    )
+    (x_shimko, calls_shimko, puts_shimko) = generate_qp_graphs(
+        df=opt_df, q_measure="pitm_shimko", prec=prec, detrend_suffix=detrend_suffix
+    )
+    generate_method_comparison_graphs(
+        x=x,
+        calls=calls,
+        puts=puts,
+        x_shimko=x_shimko,
+        calls_shimko=calls_shimko,
+        puts_shimko=puts_shimko,
+        detrend_suffix=detrend_suffix,
+    )
 
 
 if __name__ == "__main__":
@@ -449,37 +498,13 @@ if __name__ == "__main__":
     opt_df = load_preprocessed_data()
 
     # True Sf and ITM
-    detrended = False
-    (x, calls, puts) = generate_qp_graphs(
-        df=opt_df, q_measure="pitm_", prec=prec, detrended=detrended
-    )
-    (x_shimko, calls_shimko, puts_shimko) = generate_qp_graphs(
-        df=opt_df, q_measure="pitm_shimko", prec=prec, detrended=detrended
-    )
-    generate_method_comparison_graphs(
-        x=x,
-        calls=calls,
-        puts=puts,
-        x_shimko=x_shimko,
-        calls_shimko=calls_shimko,
-        puts_shimko=puts_shimko,
-        detrended=detrended,
-    )
+    pipeline(detrend_suffix="")
 
     # Detrended Sf and ITM
-    detrended = True
-    (x, calls, puts) = generate_qp_graphs(
-        df=opt_df, q_measure="pitm_", prec=prec, detrended=detrended
-    )
-    (x_shimko, calls_shimko, puts_shimko) = generate_qp_graphs(
-        df=opt_df, q_measure="pitm_shimko", prec=prec, detrended=detrended
-    )
-    generate_method_comparison_graphs(
-        x=x,
-        calls=calls,
-        puts=puts,
-        x_shimko=x_shimko,
-        calls_shimko=calls_shimko,
-        puts_shimko=puts_shimko,
-        detrended=detrended,
-    )
+    pipeline(detrend_suffix="_detrended")
+
+    # Centered via FRED/Shiller
+    pipeline(detrend_suffix="_centered")
+
+    # Centered via Shimko
+    pipeline(detrend_suffix="_centered_shimko")
