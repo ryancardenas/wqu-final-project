@@ -30,6 +30,7 @@ from wqufp.yield_curve import RiskFreeYield
 load_dotenv()  # Load our secrets from the .env file
 
 DAYS_PER_YEAR = 365
+TRADING_DAYS_PER_YEAR = 252
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 TRG_OPT_DF_DIR = PROJECT_ROOT / "data/opt_df"
 
@@ -540,17 +541,24 @@ def compute_detrended_sf(
     if rf is None:
         rf = 0.0
 
+    # Technically, we should differentiate between rf_deannualized for Monday vs other
+    # weekdays, since the daily risk-free interest accrued over the weekend is for three
+    # nights instead of just one. However, dividing by TRADING_DAYS_PER_YEAR gives us
+    # an approximation that is much easier to manage.
+    rf_deannualized = rf / TRADING_DAYS_PER_YEAR
+    rf_overnight = rf * (17.5 / 24) / DAYS_PER_YEAR  # from 1600 to 0930
+
     # We ADD rf because lr_detrended = lr - lr_mean_historical, and we want
     # lr_detrended = lr - (lr_mean_historial - rf). This causes the sign of rf to
     # become positive.
-    lr_detrended = x["lr_detrended"].values + rf
+    lr_detrended = x["lr_detrended"].values + rf_deannualized
 
     # First LR is from earlier period -> set to zero.
     lr_detrended[0] = 0
 
     # Handle last log-return from CLOSE(T-1) to OPEN(T)
     if am_settlement:
-        lr_detrended[-1] = x["onlr_detrended"].values[-1]
+        lr_detrended[-1] = x["onlr_detrended"].values[-1] + rf_overnight
 
     # Accumulate de-trended log-returns and apply final value
     lr_final = lr_detrended.sum()
